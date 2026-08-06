@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>SisiPlus browser smoke</title></head>
+<body style="font:20px sans-serif;background:#171717;color:#fff;padding:2rem">
+  <h1>SisiPlus browser smoke</h1>
+  <pre id="result">Загрузка…</pre>
+  <script>
+    window.appready = true;
+    const state = { components: [], settings: [], params: [], searches: [], menu: [] };
+    window.Lampa = {
+      Storage: { field() {}, get(name, fallback) { return fallback; }, set() {} },
+      SettingsApi: {
+        addComponent(value) { state.settings.push(value.component); },
+        addParam(value) { state.params.push(value.param.name); }
+      },
+      Component: { add(name) { state.components.push(name); } },
+      Search: { addSource(source) { state.searches.push(source.title); } },
+      Menu: { addButton(icon, title) { state.menu.push(title); } },
+      Listener: { follow() {} },
+      Platform: { is() { return false; } },
+      Noty: { show() {} }
+    };
+    window.__smokeState = state;
+  </script>
+  <script src="../dist/sisiplus.js"></script>
+  <script>
+    setTimeout(async () => {
+      try {
+        const adapters = SisiPlus.getAdapters();
+        const live = ['bongacams', 'runetki', 'chaturbate', 'stripchat'];
+        const filterChecks = await Promise.all(live.map(async (id) => {
+          const filters = await SisiPlus.getAdapter(id).getFilters();
+          return `${id}:${filters.some((filter) => filter.id === 'country')}`;
+        }));
+        const report = {
+          ok: adapters.length === 8 && state.components.length === 2 && state.menu.includes('SisiPlus'),
+          adapters: adapters.map((adapter) => adapter.id),
+          countryFilters: filterChecks,
+          state
+        };
+        document.querySelector('#result').textContent = JSON.stringify(report, null, 2);
+        document.body.dataset.smoke = report.ok ? 'passed' : 'failed';
+      } catch (error) {
+        document.querySelector('#result').textContent = error.stack;
+        document.body.dataset.smoke = 'failed';
+      }
+    }, 200);
+  </script>
+</body>
+</html>

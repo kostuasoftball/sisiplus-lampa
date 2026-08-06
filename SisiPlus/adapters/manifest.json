@@ -1,0 +1,13 @@
+{
+  "adapters": [
+    { "id": "live-base", "module": "adapters/live-base.js", "enabled": true },
+    { "id": "pornhub", "module": "adapters/pornhub.js", "enabled": true },
+    { "id": "xvideos", "module": "adapters/xvideos.js", "enabled": true },
+    { "id": "xhamster", "module": "adapters/xhamster.js", "enabled": true },
+    { "id": "efukt", "module": "adapters/efukt.js", "enabled": true },
+    { "id": "bongacams", "module": "adapters/bongacams.js", "enabled": true },
+    { "id": "runetki", "module": "adapters/runetki.js", "enabled": true },
+    { "id": "chaturbate", "module": "adapters/chaturbate.js", "enabled": true },
+    { "id": "stripchat", "module": "adapters/stripchat.js", "enabled": true }
+  ]
+}

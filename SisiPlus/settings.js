@@ -23,7 +23,14 @@
 
   function addParam(param, field) {
     if (!global.Lampa || !Lampa.SettingsApi) return;
-    Lampa.SettingsApi.addParam({ component, param, field });
+    // Lampa registers both `select` and `input` through Params.select().
+    // Its input renderer expects values[name] to be a string. If it is left
+    // undefined, opening the settings component crashes in update().
+    const normalizedParam = Object.assign({}, param);
+    if (normalizedParam.type === 'input' && typeof normalizedParam.values !== 'string') {
+      normalizedParam.values = '';
+    }
+    Lampa.SettingsApi.addParam({ component, param: normalizedParam, field });
   }
 
   function init() {
@@ -35,10 +42,6 @@
       icon: '<svg viewBox="0 0 64 64"><path fill="currentColor" d="M8 14h48v8H8zm0 14h30v8H8zm0 14h48v8H8z"/></svg>'
     });
 
-    addParam(
-      { name: 'sisiplus_age_confirmed', type: 'trigger', default: false },
-      { name: 'Мне исполнилось 18 лет', description: 'Обязательно для открытия раздела SisiPlus.' }
-    );
     addParam(
       { name: 'sisiplus_preview_enabled', type: 'trigger', default: true },
       { name: 'Видеопревью', description: 'Показывать беззвучное превью при фокусе на карточке.' }

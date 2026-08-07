@@ -59,6 +59,26 @@ test('all eight requested source adapters register independently', () => {
   });
 });
 
+test('settings are compatible with Lampa input rendering and contain no age gate', () => {
+  const params = [];
+  const context = makeContext({
+    Lampa: {
+      Storage: { field: () => undefined, get: (name, fallback) => fallback },
+      SettingsApi: {
+        addComponent() {},
+        addParam(entry) { params.push(entry.param); }
+      }
+    }
+  });
+  load(context, 'settings.js');
+  context.SisiPlus.Settings.init();
+
+  assert.equal(params.some((param) => param.name === 'sisiplus_age_confirmed'), false);
+  params.filter((param) => param.type === 'input').forEach((param) => {
+    assert.equal(typeof param.values, 'string');
+  });
+});
+
 test('adapter manifest contains unique enabled module records', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'adapters/manifest.json'), 'utf8'));
   assert.ok(Array.isArray(manifest.adapters));
@@ -90,6 +110,7 @@ test('Stripchat adapter maps API cards and stream qualities to the common contra
     })
   });
   load(context, 'api.js');
+  load(context, 'adapter-utils.js');
   load(context, 'settings.js');
   load(context, 'core.js');
   load(context, 'adapters/stripchat.js');
@@ -101,6 +122,34 @@ test('Stripchat adapter maps API cards and stream qualities to the common contra
   assert.equal(result.items[0].preview, model.previewUrl);
   assert.equal(video.streams['480p'], model.stream.url);
   assert.match(video.webpageUrl, /contract_demo$/);
+});
+
+test('Chaturbate omits hidden rooms and parses its unicode-escaped room dossier', async () => {
+  const streamUrl = 'https://edge.example/public-room.m3u8';
+  const encodedDossier = JSON.stringify({ hls_source: streamUrl }).replaceAll('"', '\\u0022');
+  const context = makeContext({
+    fetch: async (url) => String(url).includes('/api/public/affiliates/onlinerooms/')
+      ? new Response(JSON.stringify({ results: [
+        { username: 'hidden_room', current_show: 'hidden' },
+        { username: 'public_room', current_show: 'public' }
+      ] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      : new Response(`window.initialRoomDossier = "${encodedDossier}";`, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' }
+      })
+  });
+  load(context, 'api.js');
+  load(context, 'adapter-utils.js');
+  load(context, 'settings.js');
+  load(context, 'core.js');
+  load(context, 'adapters/live-base.js');
+  load(context, 'adapters/chaturbate.js');
+
+  const adapter = context.SisiPlus.getAdapter('chaturbate');
+  const listing = await adapter.getList('all', 1, {});
+  assert.deepEqual(Array.from(listing.items, (item) => item.id), ['public_room']);
+  const video = await adapter.getVideo(listing.items[0].id, listing.items[0]);
+  assert.equal(video.streams.HLS, streamUrl);
 });
 
 test('player respects the quality selected in Lampa', () => {

@@ -405,8 +405,6 @@
     return {
       title: 'SisiPlus',
       search(params, complete) {
-        const enabled = app.Settings && app.Settings.get('age_confirmed', false);
-        if (!enabled) return complete([]);
         Promise.all(app.getAdapters().map(async (adapter) => {
           try {
             const result = normalizeResult(await adapter.search(params.query, 1, {}));

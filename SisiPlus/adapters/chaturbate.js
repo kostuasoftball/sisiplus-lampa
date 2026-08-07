@@ -41,7 +41,10 @@
       const country = filters.country && filters.country !== 'all' ? filters.country : '';
       const limit = country ? 500 : 90;
       const data = await this.requestModels(category, (page - 1) * limit, limit);
-      let models = data.results || [];
+      // The affiliate feed may include rooms that have just switched to a
+      // private/hidden show. Their pages deliberately expose an empty HLS URL,
+      // so do not present those stale cards as playable live rooms.
+      let models = (data.results || []).filter((model) => !model.current_show || model.current_show === 'public');
       if (country) models = models.filter((model) => String(model.country || '').toLowerCase() === country);
       return U.result(models.slice(0, 90).map((model) => this.mapModel(model)), page, models.length >= limit ? page + 1 : page);
     }
@@ -50,6 +53,7 @@
       const country = filters.country && filters.country !== 'all' ? filters.country : '';
       const data = await this.requestModels('all', 0, 500, needle.replace(/\s+/g, '-'));
       const matches = (data.results || []).filter((model) => {
+        if (model.current_show && model.current_show !== 'public') return false;
         const text = `${model.username} ${model.display_name || ''} ${(model.tags || []).join(' ')}`.toLowerCase();
         return text.includes(needle) && (!country || String(model.country || '').toLowerCase() === country);
       });
@@ -70,7 +74,10 @@
         } catch (error) {}
       }
       if (!stream) {
-        const escaped = html.match(/hls_source\\u0022\s*:\s*\\u0022([^"<]+)/);
+        // Chaturbate encodes quotes as \u0022. Stop at the encoded closing
+        // quote as well; otherwise an empty HLS value captures the remainder
+        // of the room dossier and is later mistaken for a media URL.
+        const escaped = html.match(/hls_source\\u0022\s*:\s*\\u0022([\s\S]*?)\\u0022/);
         if (escaped) {
           try { stream = JSON.parse(`"${escaped[1]}"`); } catch (error) {}
         }

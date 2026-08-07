@@ -7,7 +7,7 @@
   const script = document.currentScript;
   const baseUrl = new URL('.', script && script.src ? script.src : global.location.href);
   const scriptUrl = new URL(script && script.src ? script.src : global.location.href);
-  const version = scriptUrl.searchParams.get('v') || (script && script.dataset.version) || '1.0.0';
+  const version = scriptUrl.searchParams.get('v') || (script && script.dataset.version) || '1.0.1';
   global.SisiPlusVersion = version;
   const coreModules = ['api.js', 'adapter-utils.js', 'player.js', 'ui.js', 'settings.js', 'core.js'];
   const fallbackAdapterModules = [

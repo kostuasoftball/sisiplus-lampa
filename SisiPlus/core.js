@@ -57,10 +57,6 @@
   }
 
   function showSources() {
-    if (!app.Settings.get('age_confirmed', false)) {
-      notify('Сначала подтвердите возраст 18+ в Настройки → SisiPlus');
-      return;
-    }
     const sources = getAdapters().map((adapter) => ({ title: adapter.getName(), adapter }));
     if (!sources.length) {
       notify('Нет подключённых адаптеров');

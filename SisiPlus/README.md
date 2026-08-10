@@ -6,18 +6,18 @@
 
 ## Установка
 
-Все пользовательские версии имеют один адрес и отличаются только значением `v`:
+Каждая пользовательская версия является отдельным полным файлом на GitHub Pages:
 
 ```text
-https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.0
-https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.1
-https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.2
-https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=beta-1.0.0
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-1.0.0.js
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-1.0.1.js
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-1.0.2.js
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-beta-1.0.0.js
 ```
 
 Последняя ссылка — экспериментальная beta 1.0.0. Она опубликована отдельно и не заменяет стабильную 1.0.2.
 
-`s.js` и `dist/sisiplus.js` — одна и та же готовая однофайловая сборка для телевизора. Модульный вариант для разработки:
+Каждый адрес содержит весь код и не зависит от переключателя или дополнительного CDN. Модульный вариант для разработки:
 
 ```text
 https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/loader.js?v=1.0.2

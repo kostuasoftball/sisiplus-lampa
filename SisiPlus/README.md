@@ -6,17 +6,16 @@
 
 ## Установка
 
-Постоянная короткая ссылка на готовую сборку этого репозитория:
+Все пользовательские версии имеют один адрес и отличаются только значением `v`:
 
 ```text
-https://kostuasoftball.github.io/sisiplus-lampa/s.js?v=102
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.0
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.1
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.2
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=beta-1.0.0
 ```
 
-Это ссылка стабильной версии. Экспериментальная сборка публикуется отдельно из ветки и не заменяет её:
-
-```text
-https://cdn.jsdelivr.net/gh/kostuasoftball/sisiplus-lampa@codex%2Fexperimental-accounts-livetv/s.js?v=110e1
-```
+Последняя ссылка — экспериментальная beta 1.0.0. Она опубликована отдельно и не заменяет стабильную 1.0.2.
 
 `s.js` и `dist/sisiplus.js` — одна и та же готовая однофайловая сборка для телевизора. Модульный вариант для разработки:
 

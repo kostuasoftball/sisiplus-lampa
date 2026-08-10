@@ -102,6 +102,7 @@
     adapters.forEach((adapter) => app.Settings.registerAdapter(adapter));
     Lampa.Component.add('sisiplus_main', app.UI.createMainComponent);
     Lampa.Component.add('sisiplus_list', app.UI.createListComponent);
+    app.UI.installHeaderFilter();
     if (Lampa.Search && typeof Lampa.Search.addSource === 'function') {
       Lampa.Search.addSource(app.UI.createSearchSource());
     }

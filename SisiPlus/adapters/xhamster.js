@@ -9,10 +9,10 @@
     getName() { return 'Xhamster'; }
     getCategories() {
       return Promise.resolve([
-        { id: 'trend', title: 'В тренде' }, { id: 'newest', title: 'Новинки' },
-        { id: 'best', title: 'Лучшие' }, { id: 'categories/russian', title: 'Русские' },
-        { id: 'categories/amateur', title: 'Любительское' }, { id: 'categories/anal', title: 'Анал' },
-        { id: 'categories/milf', title: 'MILF' }, { id: 'categories/lesbian', title: 'Лесбиянки' }
+        { id: 'trend', title: 'В тренде', group: 'sort' }, { id: 'newest', title: 'Новинки', group: 'sort' },
+        { id: 'best', title: 'Лучшие', group: 'sort' }, { id: 'categories/russian', title: 'Русские', group: 'genre' },
+        { id: 'categories/amateur', title: 'Любительское', group: 'genre' }, { id: 'categories/anal', title: 'Анал', group: 'genre' },
+        { id: 'categories/milf', title: 'MILF', group: 'genre' }, { id: 'categories/lesbian', title: 'Лесбиянки', group: 'genre' }
       ]);
     }
     parseCards(html) {

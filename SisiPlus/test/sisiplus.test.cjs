@@ -59,6 +59,65 @@ test('all eight requested source adapters register independently', () => {
   });
 });
 
+test('main preview is split into real navigable rows of four cards', () => {
+  const context = makeContext({ SisiPlus: {} });
+  load(context, 'ui.js');
+  const rows = context.SisiPlus.UI.splitMainLine({
+    title: 'Популярные',
+    category: { id: 'all', title: 'Популярные' },
+    results: Array.from({ length: 7 }, (_, id) => ({ id }))
+  });
+  assert.deepEqual(Array.from(rows, (row) => row.results.length), [4, 3]);
+  assert.deepEqual(Array.from(rows, (row) => row.title), ['Популярные', '']);
+  assert.equal(rows[1].category.id, 'all');
+  assert.equal(rows.every((row) => row.nomore), true);
+});
+
+test('filter categories are grouped by adapter metadata without site conditionals', () => {
+  const context = makeContext({ SisiPlus: {} });
+  load(context, 'ui.js');
+  const groups = context.SisiPlus.UI.categoryGroups([
+    { id: 'new', title: 'Новинки', group: 'sort' },
+    { id: 'anal', title: 'Анал', group: 'genre' },
+    { id: 'milf', title: 'MILF', group: 'genre' }
+  ]);
+  assert.deepEqual(Array.from(groups, (group) => group.title), ['Сортировка', 'Жанр']);
+  assert.deepEqual(Array.from(groups[1].options, (option) => option.id), ['anal', 'milf']);
+});
+
+test('eFukt uses its canonical host and parses cards regardless of attribute order', async () => {
+  const requests = [];
+  const listing = [
+    '<a style="background-image:url(\'https://servei.efukt.com/card.jpg\')"',
+    ' class="featured thumb item" title="Test &amp; title"',
+    ' href="/24737_Test_Title.html"></a>'
+  ].join('');
+  const video = '<video poster="https://servei.efukt.com/poster.jpg"><source type="video/mp4" src="https://servev.efukt.com/video.mp4?x=1&amp;y=2"></video>';
+  const context = makeContext({
+    fetch: async (url) => {
+      requests.push(String(url));
+      return new Response(String(url).includes('24737_') ? video : listing, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' }
+      });
+    }
+  });
+  load(context, 'api.js');
+  load(context, 'adapter-utils.js');
+  load(context, 'settings.js');
+  load(context, 'core.js');
+  load(context, 'adapters/efukt.js');
+
+  const adapter = context.SisiPlus.getAdapter('efukt');
+  const result = await adapter.getList('latest', 1);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].title, 'Test & title');
+  assert.equal(result.items[0].webpageUrl, 'https://efukt.com/24737_Test_Title.html');
+  const resolved = await adapter.getVideo(result.items[0].id, result.items[0]);
+  assert.equal(resolved.streams.original, 'https://servev.efukt.com/video.mp4?x=1&y=2');
+  assert.equal(requests.some((url) => url.startsWith('https://www.efukt.com')), false);
+});
+
 test('settings are compatible with Lampa input rendering and contain no age gate', () => {
   const params = [];
   const context = makeContext({

@@ -11,8 +11,9 @@
     getName() { return 'Chaturbate'; }
     getCategories() {
       return Promise.resolve([
-        { id: 'all', title: 'Популярные' }, { id: 'f', title: 'Девушки' },
-        { id: 'm', title: 'Парни' }, { id: 'c', title: 'Пары' }, { id: 't', title: 'Транс-модели' }
+        { id: 'all', title: 'Популярные', group: 'type' }, { id: 'f', title: 'Девушки', group: 'type' },
+        { id: 'm', title: 'Парни', group: 'type' }, { id: 'c', title: 'Пары', group: 'type' },
+        { id: 't', title: 'Транс-модели', group: 'type' }
       ]);
     }
     getFilters() { return Promise.resolve([U.countryFilter(COUNTRIES)]); }

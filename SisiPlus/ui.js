@@ -2,6 +2,16 @@
   'use strict';
 
   const app = global.SisiPlus = global.SisiPlus || {};
+  const MAIN_COLUMNS = 4;
+  const MAIN_PREVIEW_LIMIT = 8;
+
+  const FILTER_GROUP_TITLES = {
+    sort: 'Сортировка',
+    genre: 'Жанр',
+    type: 'Тип моделей',
+    feature: 'Особенности',
+    category: 'Раздел'
+  };
 
   const Preview = (() => {
     let timer = 0;
@@ -125,8 +135,29 @@
       total_pages: data.totalPages,
       collection: true,
       source: `sisiplus_${adapterId}`,
-      params: { items: { mapping: 'grid', cols: 3, align_left: true } }
+      params: { items: { mapping: 'grid', cols: MAIN_COLUMNS, align_left: true } }
     };
+  }
+
+  /**
+   * InteractionMain перемещается между логическими линиями, а не между
+   * визуальными строками CSS. Поэтому перенос одной линии из 7 карточек как 4+3
+   * выглядит правильно, но нижние три карточки недоступны с пульта. Нарезаем
+   * превью на настоящие линии по четыре элемента.
+   */
+  function splitMainLine(line, columns = MAIN_COLUMNS) {
+    const rows = [];
+    const results = (line.results || []).slice(0, MAIN_PREVIEW_LIMIT);
+    for (let index = 0; index < results.length; index += columns) {
+      rows.push({
+        ...line,
+        title: index === 0 ? line.title : '',
+        results: results.slice(index, index + columns),
+        nomore: true,
+        previewRow: Math.floor(index / columns)
+      });
+    }
+    return rows;
   }
 
   function empty(component, error) {
@@ -197,7 +228,7 @@
         return null;
       }
     }));
-    const ready = lines.filter((line) => line && line.results.length);
+    const ready = lines.filter((line) => line && line.results.length).flatMap((line) => splitMainLine(line));
     if (!ready.length) throw new Error('Источник не вернул доступных моделей');
     return ready;
   }
@@ -218,11 +249,11 @@
     };
 
     component.onMore = (line) => Lampa.Activity.push({
-      title: line.title,
+      title: line.category.title,
       component: 'sisiplus_list',
       adapterId: adapter.id,
       category: line.category.id,
-      page: 2
+      page: 1
     });
     component.onAppend = (line) => {
       line.onAppend = (card) => {
@@ -233,6 +264,8 @@
         };
       };
     };
+    component.filter = () => showListMenu(adapter, component, object);
+    component.onRight = component.filter;
     return component;
   }
 
@@ -253,19 +286,21 @@
         line.use({
           onMore() {
             Lampa.Activity.push({
-              title: data.title,
+              title: data.category.title,
               component: 'sisiplus_list',
               adapterId: adapter.id,
               category: data.category.id,
-              page: 2
+              page: 1
             });
           }
         });
       },
+      onRight() { showListMenu(adapter, component, object); },
       onPause: Preview.hide,
       onStop: Preview.hide,
       onDestroy: Preview.hide
     });
+    component.filter = () => showListMenu(adapter, component, object);
     return component;
   }
 
@@ -309,31 +344,63 @@
     });
   }
 
+  function categoryGroups(categories) {
+    const groups = new Map();
+    categories.forEach((category) => {
+      const id = category.group || 'category';
+      if (!groups.has(id)) groups.set(id, []);
+      groups.get(id).push(category);
+    });
+    return Array.from(groups, ([id, options]) => ({
+      id,
+      title: FILTER_GROUP_TITLES[id] || id,
+      options
+    }));
+  }
+
+  function showCategoryOptions(adapter, object, group) {
+    const current = object.category || (group.options[0] && group.options[0].id);
+    Lampa.Select.show({
+      title: group.title,
+      items: group.options.map((option) => ({ ...option, selected: option.id === current })),
+      onBack: () => Lampa.Controller.toggle('content'),
+      onSelect(option) {
+        Lampa.Controller.toggle('content');
+        Lampa.Activity.push({
+          title: `${adapter.getName()} · ${option.title}`,
+          component: 'sisiplus_list',
+          adapterId: adapter.id,
+          category: option.id,
+          page: 1,
+          filters: { ...(object.filters || {}) }
+        });
+      }
+    });
+  }
+
   function showListMenu(adapter, component, object) {
     Promise.all([adapter.getCategories(), adapter.getFilters(object)]).then(([categories, filters]) => {
+      const groups = categoryGroups(categories);
       const items = [
         { title: 'Поиск', search: true },
+        ...groups.map((group) => {
+          const selected = group.options.find((entry) => entry.id === object.category);
+          return { title: selected ? `${group.title}: ${selected.title}` : group.title, categoryGroup: group };
+        }),
         ...filters.map((filter) => {
           const selected = object.filters && object.filters[filter.id];
           const option = filter.options.find((entry) => entry.id === selected);
           return { title: `${filter.title}: ${option ? option.title : 'Все'}`, filter };
-        }),
-        ...categories
+        })
       ];
       Lampa.Select.show({
-        title: adapter.getName(),
+        title: 'Фильтр',
         items,
         onBack: () => Lampa.Controller.toggle('content'),
         onSelect: (item) => {
           if (item.search) askSearch(adapter);
+          else if (item.categoryGroup) showCategoryOptions(adapter, object, item.categoryGroup);
           else if (item.filter) showFilterOptions(adapter, object, item.filter);
-          else Lampa.Activity.push({
-            title: item.title,
-            component: 'sisiplus_list',
-            adapterId: adapter.id,
-            category: item.id,
-            page: 1
-          });
         }
       });
     }).catch((error) => console.error('[SisiPlus:ui]', error));
@@ -360,6 +427,7 @@
     };
     component.cardRender = (params, item, card) => bindCard(card, item, adapter);
     component.onRight = () => showListMenu(adapter, component, object);
+    component.filter = component.onRight;
     return component;
   }
 
@@ -392,6 +460,7 @@
       onStop: Preview.hide,
       onDestroy: Preview.hide
     });
+    component.filter = () => showListMenu(adapter, component, object);
     return component;
   }
 
@@ -428,5 +497,41 @@
     };
   }
 
-  app.UI = { createMainComponent, createListComponent, createSearchSource, toLampaCard, Preview };
+  function installHeaderFilter() {
+    if (typeof document === 'undefined' || !global.Lampa || !Lampa.Listener) return;
+    if (document.querySelector('.sisiplus-head-filter')) return;
+    const search = document.querySelector('.head .open--search');
+    if (!search || !search.parentNode) return;
+    const button = document.createElement('div');
+    button.className = 'head__action head__settings selector sisiplus-head-filter';
+    button.style.display = 'none';
+    button.innerHTML = '<svg height="36" viewBox="0 0 38 36" fill="none"><rect x="1.5" y="1.5" width="35" height="33" rx="1.5" stroke="currentColor" stroke-width="3"/><path d="M7 9.5h24M7 18h24M7 26.5h24" stroke="currentColor" stroke-width="3"/><circle cx="13.5" cy="18" r="3.5" fill="currentColor"/><circle cx="23.5" cy="26.5" r="3.5" fill="currentColor"/><circle cx="21.5" cy="9.5" r="3.5" fill="currentColor"/></svg>';
+    search.parentNode.insertBefore(button, search.nextSibling);
+    let active = null;
+    const open = () => {
+      if (!active) return;
+      let component = active.activity && active.activity.component;
+      if (typeof component === 'function') component = component();
+      if (component && typeof component.filter === 'function') component.filter();
+    };
+    button.addEventListener('hover:enter', open);
+    button.addEventListener('click', open);
+    Lampa.Listener.follow('activity', (event) => {
+      if (event.type !== 'start') return;
+      const own = event.component === 'sisiplus_main' || event.component === 'sisiplus_list';
+      active = own ? event.object : null;
+      button.style.display = own ? '' : 'none';
+    });
+  }
+
+  app.UI = {
+    createMainComponent,
+    createListComponent,
+    createSearchSource,
+    toLampaCard,
+    splitMainLine,
+    categoryGroups,
+    installHeaderFilter,
+    Preview
+  };
 })(window);

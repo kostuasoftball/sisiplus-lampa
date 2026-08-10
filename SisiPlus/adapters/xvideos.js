@@ -9,10 +9,10 @@
     getName() { return 'Xvideos'; }
     getCategories() {
       return Promise.resolve([
-        { id: 'new', title: 'Новинки' }, { id: 'best', title: 'Лучшие' },
-        { id: 'c/Amateur-65', title: 'Любительское' }, { id: 'c/Anal-12', title: 'Анал' },
-        { id: 'c/Asian_Woman-32', title: 'Азиатки' }, { id: 'c/Big_Tits-23', title: 'Большая грудь' },
-        { id: 'c/Lesbian-26', title: 'Лесбиянки' }, { id: 'c/Milf-19', title: 'MILF' }
+        { id: 'new', title: 'Новинки', group: 'sort' }, { id: 'best', title: 'Лучшие', group: 'sort' },
+        { id: 'c/Amateur-65', title: 'Любительское', group: 'genre' }, { id: 'c/Anal-12', title: 'Анал', group: 'genre' },
+        { id: 'c/Asian_Woman-32', title: 'Азиатки', group: 'genre' }, { id: 'c/Big_Tits-23', title: 'Большая грудь', group: 'genre' },
+        { id: 'c/Lesbian-26', title: 'Лесбиянки', group: 'genre' }, { id: 'c/Milf-19', title: 'MILF', group: 'genre' }
       ]);
     }
     parseCards(html) {

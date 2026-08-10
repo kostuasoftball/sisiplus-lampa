@@ -11,6 +11,10 @@ const banner = `/* SisiPlus v${version} — single-file build for Lampa. Generat
 const body = files.map((file) => `\n/* ===== ${file} ===== */\n${fs.readFileSync(path.join(root, file), 'utf8').trim()}\n`).join('');
 const open = `(function sisiplusBundle(window){\n'use strict';\nif(window.__sisiplusBundleStarted) return;\nwindow.__sisiplusBundleStarted = true;\nwindow.SisiPlusVersion = '${version}';\n`;
 const boot = `\nif(window.SisiPlus) window.SisiPlus.boot();\n})(window);\n`;
+const bundle = banner + open + body + boot;
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
-fs.writeFileSync(path.join(root, 'dist', 'sisiplus.js'), banner + open + body + boot, 'utf8');
-console.log(`Built dist/sisiplus.js from ${files.length} modules`);
+fs.writeFileSync(path.join(root, 'dist', 'sisiplus.js'), bundle, 'utf8');
+// Короткая точка установки в корне GitHub Pages. Это та же сборка, а не второй
+// вариант плагина, поэтому обе ссылки всегда обновляются одновременно.
+fs.writeFileSync(path.join(root, '..', 's.js'), bundle, 'utf8');
+console.log(`Built dist/sisiplus.js and ../s.js from ${files.length} modules`);

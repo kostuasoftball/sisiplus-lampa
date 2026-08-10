@@ -2,15 +2,20 @@
   'use strict';
   const app = global.SisiPlus;
   const U = app.AdapterUtils;
-  const SITE = 'https://www.efukt.com';
+  // www.efukt.com сейчас отвечает перенаправлением. В WebView браузер следует ему
+  // автоматически, а Lampa.Reguest.native на части Android TV возвращает пустое
+  // тело 301/302. Поэтому всегда используем конечный canonical host.
+  const SITE = 'https://efukt.com';
 
   class EfuktAdapter extends app.Adapter {
     constructor() { super('efukt'); this.items = new Map(); }
     getName() { return 'eFukt'; }
     async getCategories() {
       const fallback = [
-        { id: 'latest', title: 'Новинки' }, { id: 'category/funny', title: 'Funny' },
-        { id: 'category/fails', title: 'Fails' }, { id: 'category/compilations', title: 'Compilations' }
+        { id: 'latest', title: 'Новинки', group: 'sort' },
+        { id: 'category/funny', title: 'Funny', group: 'genre' },
+        { id: 'category/fail', title: 'Fails', group: 'genre' },
+        { id: 'category/compilations', title: 'Compilations', group: 'genre' }
       ];
       try {
         const html = await app.Api.siteText(`${SITE}/categories/`, { referer: `${SITE}/` });
@@ -19,7 +24,10 @@
         const regex = /href="https?:\/\/(?:www\.)?efukt\.com\/category\/([^/"?#]+)\/"[^>]*title="([^"]+)"/gi;
         let match;
         while ((match = regex.exec(html)) && categories.length < 24) {
-          if (!seen.has(match[1])) { seen.add(match[1]); categories.push({ id: `category/${match[1]}`, title: U.decodeHtml(match[2]) }); }
+          if (!seen.has(match[1])) {
+            seen.add(match[1]);
+            categories.push({ id: `category/${match[1]}`, title: U.decodeHtml(match[2]), group: 'genre' });
+          }
         }
         return [fallback[0]].concat(categories.length ? categories : fallback.slice(1));
       } catch (error) { return fallback; }
@@ -27,15 +35,25 @@
     parseCards(html) {
       const output = [];
       const seen = new Set();
-      const regex = /<a[^>]+href="(https?:\/\/(?:www\.)?efukt\.com\/(\d+)_([^"]+)\.html)"[^>]+title="([^"]+)"[^>]+class="thumb"[^>]+background-image:\s*url\(['"]([^'"]+)/gi;
-      let match;
-      while ((match = regex.exec(html))) {
-        if (seen.has(match[2])) continue;
-        seen.add(match[2]);
-        const item = { id: match[2], title: U.decodeHtml(match[4]), poster: U.decodeHtml(match[5]), background: U.decodeHtml(match[5]), webpageUrl: match[1] };
+      // Разбираем каждый тег независимо от порядка его атрибутов. Это устойчивее
+      // прежнего длинного regex: сайт периодически переставляет class/title/style.
+      const anchors = String(html || '').match(/<a\b[^>]*>/gi) || [];
+      anchors.forEach((anchor) => {
+        if (!/\bclass=["'][^"']*\bthumb\b/i.test(anchor)) return;
+        const href = (anchor.match(/\bhref=["']([^"']+)["']/i) || [])[1];
+        const pageUrl = U.absolute(SITE, href);
+        const page = pageUrl.match(/^https?:\/\/(?:www\.)?efukt\.com\/(\d+)_[^/?#]+\.html/i);
+        const posterValue = (anchor.match(/background-image\s*:\s*url\(\s*["']?([^"')\s]+)/i) || [])[1];
+        if (!page || !posterValue || seen.has(page[1])) return;
+        const titleValue = (anchor.match(/\btitle=["']([^"']*)["']/i) || [])[1] || `eFukt #${page[1]}`;
+        seen.add(page[1]);
+        const poster = U.absolute(SITE, posterValue);
+        const item = {
+          id: page[1], title: U.decodeHtml(titleValue), poster, background: poster, webpageUrl: pageUrl
+        };
         this.items.set(item.id, item);
         output.push(item);
-      }
+      });
       return output;
     }
     async load(url, page) {

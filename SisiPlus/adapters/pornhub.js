@@ -10,15 +10,15 @@
     getName() { return 'Pornhub'; }
     getCategories() {
       return Promise.resolve([
-        { id: 'sort:mostrecent', title: 'Новинки' },
-        { id: 'sort:mostviewed', title: 'Популярные' },
-        { id: 'sort:rating', title: 'По рейтингу' },
-        { id: 'category:russian', title: 'Русские' },
-        { id: 'category:amateur', title: 'Любительское' },
-        { id: 'category:anal', title: 'Анал' },
-        { id: 'category:milf', title: 'MILF' },
-        { id: 'category:lesbian', title: 'Лесбиянки' },
-        { id: 'category:transgender', title: 'Транс' }
+        { id: 'sort:mostrecent', title: 'Новинки', group: 'sort' },
+        { id: 'sort:mostviewed', title: 'Популярные', group: 'sort' },
+        { id: 'sort:rating', title: 'По рейтингу', group: 'sort' },
+        { id: 'category:russian', title: 'Русские', group: 'genre' },
+        { id: 'category:amateur', title: 'Любительское', group: 'genre' },
+        { id: 'category:anal', title: 'Анал', group: 'genre' },
+        { id: 'category:milf', title: 'MILF', group: 'genre' },
+        { id: 'category:lesbian', title: 'Лесбиянки', group: 'genre' },
+        { id: 'category:transgender', title: 'Транс', group: 'genre' }
       ]);
     }
     mapVideo(video) {

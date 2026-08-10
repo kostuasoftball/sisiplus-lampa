@@ -2,8 +2,9 @@
   'use strict';
   const app = global.SisiPlus;
   const U = app.AdapterUtils;
-  const LIVE_COUNTRIES = ['all', 'ru', 'ua', 'us', 'de', 'fr', 'es', 'it', 'br', 'pl', 'jp', 'in']
-    .map((id) => ({ id, title: U.COUNTRY_NAMES[id] }));
+  // Единый полный справочник для всех live-адаптеров. Отсутствующая в текущей
+  // выдаче страна просто вернёт пустой список и не требует правок интерфейса.
+  const LIVE_COUNTRIES = U.COUNTRY_OPTIONS;
 
   class BongaNetworkAdapter extends app.Adapter {
     constructor(id, config) {
@@ -14,9 +15,9 @@
     getName() { return this.config.name; }
     getCategories() {
       return Promise.resolve([
-        { id: 'all', title: 'Популярные' }, { id: 'new', title: 'Новые' },
-        { id: 'female', title: 'Девушки' }, { id: 'couples', title: 'Пары' },
-        { id: 'male', title: 'Парни' }, { id: 'transsexual', title: 'Транс-модели' }
+        { id: 'all', title: 'Популярные', group: 'type' }, { id: 'new', title: 'Новые', group: 'type' },
+        { id: 'female', title: 'Девушки', group: 'type' }, { id: 'couples', title: 'Пары', group: 'type' },
+        { id: 'male', title: 'Парни', group: 'type' }, { id: 'transsexual', title: 'Транс-модели', group: 'type' }
       ]);
     }
     getFilters() { return Promise.resolve([U.countryFilter(LIVE_COUNTRIES)]); }

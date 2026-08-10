@@ -23,14 +23,14 @@
 
     getCategories() {
       return Promise.resolve([
-        { id: 'popular', title: 'Популярные' },
-        { id: 'girls/best', title: 'Девушки' },
-        { id: 'girls/new', title: 'Новые модели' },
-        { id: 'girls/russian', title: 'Русскоязычные' },
-        { id: 'couples/best', title: 'Пары' },
-        { id: 'men/best', title: 'Парни' },
-        { id: 'trans/best', title: 'Транс-модели' },
-        { id: 'girls/vr', title: 'VR-камеры' }
+        { id: 'popular', title: 'Популярные', group: 'type' },
+        { id: 'girls/best', title: 'Девушки', group: 'type' },
+        { id: 'girls/new', title: 'Новые модели', group: 'type' },
+        { id: 'girls/russian', title: 'Русскоязычные', group: 'type' },
+        { id: 'couples/best', title: 'Пары', group: 'type' },
+        { id: 'men/best', title: 'Парни', group: 'type' },
+        { id: 'trans/best', title: 'Транс-модели', group: 'type' },
+        { id: 'girls/vr', title: 'VR-камеры', group: 'feature' }
       ]);
     }
 

@@ -4,16 +4,16 @@
 
 ## Установка
 
-Все опубликованные версии используют один адрес. Меняется только значение `v`:
+Каждая опубликованная версия является отдельным полным JavaScript-файлом на GitHub Pages:
 
 ```text
-https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.0
-https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.1
-https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.2
-https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=beta-1.0.0
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-1.0.0.js
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-1.0.1.js
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-1.0.2.js
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-beta-1.0.0.js
 ```
 
-`sisiplus.js` выбирает отдельную сохранённую сборку по параметру `v`; это не просто метка кэша. Если версия не указана или написана неверно, загружается стабильная `1.0.2`.
+Каждая ссылка содержит всю сборку и не зависит от дополнительного загрузчика. `dist/sisiplus.js` остаётся полной копией стабильной версии 1.0.2 для обратной совместимости.
 
 Модульный вариант для разработки:
 

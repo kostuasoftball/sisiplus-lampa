@@ -27,7 +27,7 @@ function load(context, relativePath) {
 
 test('all browser modules have valid JavaScript syntax', () => {
   const files = [
-    'loader.js', 'api.js', 'adapter-utils.js', 'player.js', 'ui.js', 'settings.js', 'core.js',
+    'loader.js', 'version-router.js', 'api.js', 'adapter-utils.js', 'player.js', 'ui.js', 'settings.js', 'core.js',
     'adapters/live-base.js', 'adapters/pornhub.js', 'adapters/xvideos.js',
     'adapters/xhamster.js', 'adapters/efukt.js', 'adapters/bongacams.js',
     'adapters/runetki.js', 'adapters/chaturbate.js', 'adapters/stripchat.js'
@@ -249,4 +249,31 @@ test('loader propagates its version to every browser module', async () => {
   assert.equal(booted, true);
   assert.ok(scripts.length >= 5);
   scripts.forEach((script) => assert.match(script.src, /[?&]v=test-build/));
+});
+
+test('public version router selects beta and stable bundles using only the v query', () => {
+  const appended = [];
+  const context = makeContext({ location: { href: 'https://lampa.example/' } });
+  context.document = {
+    currentScript: {
+      src: 'https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=beta-1.0.0'
+    },
+    scripts: [],
+    createElement: () => ({}),
+    head: { appendChild: (node) => appended.push(node) },
+    documentElement: { appendChild: (node) => appended.push(node) }
+  };
+  load(context, 'version-router.js');
+  assert.equal(appended.length, 1);
+  assert.equal(
+    appended[0].src,
+    'https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/versions/beta-1.0.0.js?v=beta-1.0.0'
+  );
+
+  const versions = ['1.0.0', '1.0.1', '1.0.2', 'beta-1.0.0'];
+  versions.forEach((version) => {
+    const bundle = fs.readFileSync(path.join(root, 'dist', 'versions', `${version}.js`), 'utf8');
+    const expected = version === 'beta-1.0.0' ? '1.1.0-exp.1' : version;
+    assert.match(bundle.slice(0, 120), new RegExp(`SisiPlus v${expected.replaceAll('.', '\\.')}`));
+  });
 });

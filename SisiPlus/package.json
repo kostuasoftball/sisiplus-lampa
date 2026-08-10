@@ -6,6 +6,7 @@
     "test": "node --test test/*.test.cjs",
     "check": "node test/check.cjs",
     "build": "node build.cjs",
+    "publish:versions": "node publish-versions.cjs",
     "test:live": "node test/live-smoke.cjs"
   }
 }

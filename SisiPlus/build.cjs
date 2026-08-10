@@ -12,9 +12,12 @@ const body = files.map((file) => `\n/* ===== ${file} ===== */\n${fs.readFileSync
 const open = `(function sisiplusBundle(window){\n'use strict';\nif(window.__sisiplusBundleStarted) return;\nwindow.__sisiplusBundleStarted = true;\nwindow.SisiPlusVersion = '${version}';\n`;
 const boot = `\nif(window.SisiPlus) window.SisiPlus.boot();\n})(window);\n`;
 const bundle = banner + open + body + boot;
-fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
-fs.writeFileSync(path.join(root, 'dist', 'sisiplus.js'), bundle, 'utf8');
+fs.mkdirSync(path.join(root, 'dist', 'versions'), { recursive: true });
+fs.writeFileSync(path.join(root, 'dist', 'versions', `${version}.js`), bundle, 'utf8');
+// Public GitHub Pages entrypoint is a small router. It keeps one readable URL
+// while the `v` query selects a genuinely different immutable bundle.
+fs.copyFileSync(path.join(root, 'version-router.js'), path.join(root, 'dist', 'sisiplus.js'));
 // Короткая точка установки в корне GitHub Pages. Это та же сборка, а не второй
 // вариант плагина, поэтому обе ссылки всегда обновляются одновременно.
 fs.writeFileSync(path.join(root, '..', 's.js'), bundle, 'utf8');
-console.log(`Built dist/sisiplus.js and ../s.js from ${files.length} modules`);
+console.log(`Built dist/versions/${version}.js, version router, and ../s.js from ${files.length} modules`);

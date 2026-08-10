@@ -4,13 +4,18 @@
 
 ## Установка
 
-Постоянная короткая ссылка на готовую сборку этого репозитория:
+Все опубликованные версии используют один адрес. Меняется только значение `v`:
 
 ```text
-https://kostuasoftball.github.io/sisiplus-lampa/s.js?v=102
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.0
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.1
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=1.0.2
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus.js?v=beta-1.0.0
 ```
 
-`s.js` и `dist/sisiplus.js` — одна и та же готовая однофайловая сборка для телевизора. Модульный вариант для разработки:
+`sisiplus.js` выбирает отдельную сохранённую сборку по параметру `v`; это не просто метка кэша. Если версия не указана или написана неверно, загружается стабильная `1.0.2`.
+
+Модульный вариант для разработки:
 
 ```text
 https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/loader.js?v=1.0.2

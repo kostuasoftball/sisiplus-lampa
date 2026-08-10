@@ -8,14 +8,19 @@
   const SITE_URL = 'https://ru.stripchat.com';
   const PAGE_SIZE = 60;
   const SEARCH_PAGE_SIZE = 400;
+  const ACCOUNT_API = 'https://stripchat.com/api/front';
 
   class StripchatAdapter extends app.Adapter {
     constructor() {
       super('stripchat');
       this.models = new Map();
+      this.accountToken = null;
+      this.accountTokenExpires = 0;
     }
 
     getName() { return 'Stripchat'; }
+    getCapabilities() { return { account: true, favorites: true, liveTv: true }; }
+    getLiveTVItems(options = {}) { return this.getList('popular', options.page || 1, {}); }
 
     getFilters() {
       return Promise.resolve([app.AdapterUtils.countryFilter()]);
@@ -127,6 +132,110 @@
         webpageUrl: item.webpageUrl || (username ? `${SITE_URL}/${encodeURIComponent(username)}` : SITE_URL),
         headers: { Referer: `${SITE_URL}/`, Origin: SITE_URL }
       };
+    }
+
+    sessionCookie(session) {
+      return String(session || '').replace(/^cookie\s*:\s*/i, '').trim();
+    }
+
+    findDeep(value, keys) {
+      if (!value || typeof value !== 'object') return undefined;
+      for (const key of Object.keys(value)) {
+        if (keys.includes(key) && value[key] !== undefined && value[key] !== null) return value[key];
+      }
+      for (const child of Object.values(value)) {
+        if (child && typeof child === 'object') {
+          const found = this.findDeep(child, keys);
+          if (found !== undefined) return found;
+        }
+      }
+      return undefined;
+    }
+
+    async accountConfig(session, force = false) {
+      if (!force && this.accountToken && this.accountTokenExpires > Date.now()) {
+        return { token: this.accountToken, account: this.accountName || '' };
+      }
+      const config = await app.Api.siteJson(`${ACCOUNT_API}/v3/config/dynamic`, {
+        referer: 'https://stripchat.com/', proxy: 'never', retries: 0,
+        headers: { Cookie: this.sessionCookie(session), Accept: 'application/json' }
+      });
+      const token = this.findDeep(config, ['jwtToken', 'jwt_token', 'jwt']);
+      const user = this.findDeep(config, ['user', 'currentUser', 'loggedUser']);
+      const account = user && typeof user === 'object'
+        ? (user.username || user.login || user.name || '')
+        : (this.findDeep(config, ['username', 'userName']) || '');
+      const guest = user && typeof user === 'object' && (user.isGuest === true || user.guest === true);
+      this.accountToken = token || '';
+      this.accountName = account || '';
+      this.accountTokenExpires = Date.now() + 4 * 60_000;
+      return { token: this.accountToken, account: this.accountName, guest, config };
+    }
+
+    clearSession() {
+      this.accountToken = null;
+      this.accountName = '';
+      this.accountTokenExpires = 0;
+    }
+
+    async favoriteRequest(path, session, forceToken = false) {
+      const account = await this.accountConfig(session, forceToken);
+      if (!account.token) throw new Error('Stripchat не выдал токен сессии');
+      return app.Api.siteJson(`${ACCOUNT_API}${path}`, {
+        referer: 'https://stripchat.com/favorites', proxy: 'never', retries: 0,
+        headers: {
+          Cookie: this.sessionCookie(session), Authorization: account.token,
+          Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest'
+        }
+      });
+    }
+
+    async validateSession(session) {
+      const account = await this.accountConfig(session, true);
+      if (!account.token || account.guest || !account.account) {
+        return { valid: false, message: 'Сессия Stripchat не содержит авторизованный аккаунт' };
+      }
+      try {
+        await this.favoriteRequest('/models/favorites?limit=1&offset=0', session);
+      } catch (error) {
+        this.clearSession();
+        return { valid: false, message: 'Stripchat отклонил сессию или она истекла' };
+      }
+      return { valid: true, account: account.account };
+    }
+
+    favoriteModels(payload) {
+      if (Array.isArray(payload)) return payload;
+      if (payload && Array.isArray(payload.models)) return payload.models;
+      if (payload && payload.data && Array.isArray(payload.data.models)) return payload.data.models;
+      if (payload && payload.result && Array.isArray(payload.result.models)) return payload.result.models;
+      return [];
+    }
+
+    async getFavorites(session) {
+      let online;
+      let offline;
+      try {
+        [online, offline] = await Promise.all([
+          this.favoriteRequest('/models/favorites?limit=100&offset=0', session),
+          this.favoriteRequest('/models/favorites/offline?limit=100&offset=0', session)
+        ]);
+      } catch (error) {
+        // JWT динамический. Один раз обновляем его, затем отдаём реальную ошибку.
+        this.clearSession();
+        [online, offline] = await Promise.all([
+          this.favoriteRequest('/models/favorites?limit=100&offset=0', session, true),
+          this.favoriteRequest('/models/favorites/offline?limit=100&offset=0', session)
+        ]);
+      }
+      const onlineItems = this.favoriteModels(online).map((model) => this.mapModel(model));
+      const offlineItems = this.favoriteModels(offline).map((model) => {
+        const item = this.mapModel(model);
+        item.badge = 'OFFLINE';
+        item.offline = true;
+        return item;
+      });
+      return Array.from(new Map(onlineItems.concat(offlineItems).map((item) => [String(item.id), item])).values());
     }
   }
 

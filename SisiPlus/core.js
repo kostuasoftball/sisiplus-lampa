@@ -14,6 +14,7 @@
     getName() { throw new Error('getName() не реализован'); }
     getCategories() { return Promise.resolve([]); }
     getFilters() { return Promise.resolve([]); }
+    getCapabilities() { return {}; }
     search() { return Promise.resolve({ items: [], page: 1, totalPages: 1 }); }
     getList() { return Promise.resolve({ items: [], page: 1, totalPages: 1 }); }
     getVideo() { throw new Error('getVideo() не реализован'); }
@@ -100,6 +101,7 @@
     lampaInitialized = true;
     app.Settings.init();
     adapters.forEach((adapter) => app.Settings.registerAdapter(adapter));
+    if (app.LiveTV) app.LiveTV.init();
     Lampa.Component.add('sisiplus_main', app.UI.createMainComponent);
     Lampa.Component.add('sisiplus_list', app.UI.createListComponent);
     app.UI.installHeaderFilter();

@@ -118,13 +118,23 @@
       emit: {
         onlyEnter(target, data) {
           const selected = data || card;
-          app.Player.playItem(selected, app.getAdapter(selected.adapterId));
+          activateItem(selected, app.getAdapter(selected.adapterId));
         },
         onLong(target, data) { showCardMenu(data || card, app.getAdapter(adapterId)); },
         onFocus(target, data) { Preview.show(target, data || card); }
       }
     };
     return card;
+  }
+
+  function activateItem(item, adapter) {
+    if (!item || !adapter) return false;
+    if (item.sisiplusAction === 'livetv' && app.LiveTV) return app.LiveTV.start(adapter);
+    if (item.offline) {
+      if (global.Lampa && Lampa.Noty) Lampa.Noty.show(`${item.title}: модель сейчас не в сети`);
+      return false;
+    }
+    return app.Player.playItem(item, adapter);
   }
 
   function toCollection(result, adapterId) {
@@ -171,7 +181,7 @@
   }
 
   function bindCard(card, item, adapter) {
-    card.onEnter = () => app.Player.playItem(item, adapter);
+    card.onEnter = () => activateItem(item, adapter);
     card.onMenu = () => showCardMenu(item, adapter);
     const originalFocus = card.onFocus;
     card.onFocus = (target, data) => {
@@ -219,7 +229,7 @@
           adapterId: adapter.id,
           url: category.id,
           card_events: {
-            onEnter(card, item) { app.Player.playItem(item, adapter); },
+            onEnter(card, item) { activateItem(item, adapter); },
             onMenu(card, item) { showCardMenu(item, adapter); }
           }
         };
@@ -228,7 +238,31 @@
         return null;
       }
     }));
-    const ready = lines.filter((line) => line && line.results.length).flatMap((line) => splitMainLine(line));
+    const capabilities = typeof adapter.getCapabilities === 'function' ? adapter.getCapabilities() : {};
+    const special = [];
+    if (capabilities.favorites && app.Auth) {
+      const favoriteItems = await app.Auth.favorites(adapter);
+      if (favoriteItems.length) {
+        special.push(...splitMainLine({
+          title: 'Избранные модели', category: { id: 'favorites', title: 'Избранные модели' },
+          results: favoriteItems.map((item) => toLampaCard(item, adapter.id)),
+          adapterId: adapter.id, nomore: true,
+          card_events: {
+            onEnter(card, item) { activateItem(item, adapter); },
+            onMenu(card, item) { showCardMenu(item, adapter); }
+          }
+        }));
+      }
+    }
+    if (capabilities.liveTv && app.LiveTV) {
+      special.push(...splitMainLine({
+        title: 'Live TV', category: { id: 'livetv', title: 'Live TV' },
+        results: [toLampaCard(app.LiveTV.card(adapter), adapter.id)],
+        adapterId: adapter.id, nomore: true,
+        card_events: { onEnter(card, item) { activateItem(item, adapter); } }
+      }));
+    }
+    const ready = special.concat(lines.filter((line) => line && line.results.length).flatMap((line) => splitMainLine(line)));
     if (!ready.length) throw new Error('Источник не вернул доступных моделей');
     return ready;
   }
@@ -487,7 +521,7 @@
       onCancel() {},
       onSelect(params, close) {
         if (close) close();
-        app.Player.playItem(params.element, app.getAdapter(params.element.adapterId));
+        activateItem(params.element, app.getAdapter(params.element.adapterId));
       },
       params: {
         lazy: true,
@@ -531,6 +565,7 @@
     toLampaCard,
     splitMainLine,
     categoryGroups,
+    activateItem,
     installHeaderFilter,
     Preview
   };

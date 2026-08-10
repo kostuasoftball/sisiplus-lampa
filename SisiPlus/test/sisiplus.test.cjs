@@ -27,7 +27,7 @@ function load(context, relativePath) {
 
 test('all browser modules have valid JavaScript syntax', () => {
   const files = [
-    'loader.js', 'api.js', 'adapter-utils.js', 'player.js', 'ui.js', 'settings.js', 'core.js',
+    'loader.js', 'api.js', 'adapter-utils.js', 'auth.js', 'player.js', 'livetv.js', 'ui.js', 'settings.js', 'core.js',
     'adapters/live-base.js', 'adapters/pornhub.js', 'adapters/xvideos.js',
     'adapters/xhamster.js', 'adapters/efukt.js', 'adapters/bongacams.js',
     'adapters/runetki.js', 'adapters/chaturbate.js', 'adapters/stripchat.js'
@@ -57,6 +57,41 @@ test('all eight requested source adapters register independently', () => {
     const filters = context.SisiPlus.getAdapter(id).getFilters();
     assert.equal(typeof filters.then, 'function');
   });
+});
+
+test('Live TV is capability-driven and enabled only for the three requested adapters', () => {
+  const context = makeContext();
+  load(context, 'api.js');
+  load(context, 'adapter-utils.js');
+  load(context, 'settings.js');
+  load(context, 'core.js');
+  ['adapters/live-base.js', 'adapters/bongacams.js', 'adapters/runetki.js', 'adapters/chaturbate.js', 'adapters/stripchat.js']
+    .forEach((file) => load(context, file));
+  assert.deepEqual(
+    ['bongacams', 'chaturbate', 'stripchat'].map((id) => context.SisiPlus.getAdapter(id).getCapabilities().liveTv),
+    [true, true, true]
+  );
+  assert.equal(context.SisiPlus.getAdapter('runetki').getCapabilities().liveTv, false);
+});
+
+test('account session is optional, local, and can be cleared without affecting adapters', () => {
+  const values = new Map();
+  const context = makeContext({
+    Lampa: {
+      Storage: {
+        field: (name) => values.get(name),
+        get: (name, fallback) => values.has(name) ? values.get(name) : fallback,
+        set: (name, value) => values.set(name, value)
+      }
+    }
+  });
+  load(context, 'settings.js');
+  load(context, 'auth.js');
+  assert.equal(context.SisiPlus.Auth.getSession('stripchat'), '');
+  context.SisiPlus.Auth.setSession('stripchat', 'sid=secret');
+  assert.equal(context.SisiPlus.Auth.getSession('stripchat'), 'sid=secret');
+  context.SisiPlus.Auth.setSession('stripchat', '');
+  assert.equal(context.SisiPlus.Auth.getState('stripchat').state, 'none');
 });
 
 test('main preview is split into real navigable rows of four cards', () => {
@@ -209,6 +244,46 @@ test('Chaturbate omits hidden rooms and parses its unicode-escaped room dossier'
   assert.deepEqual(Array.from(listing.items, (item) => item.id), ['public_room']);
   const video = await adapter.getVideo(listing.items[0].id, listing.items[0]);
   assert.equal(video.streams.HLS, streamUrl);
+});
+
+test('Chaturbate account parser extracts followed rooms without requiring auth for public mode', () => {
+  const context = makeContext();
+  load(context, 'api.js');
+  load(context, 'adapter-utils.js');
+  load(context, 'settings.js');
+  load(context, 'core.js');
+  load(context, 'adapters/live-base.js');
+  load(context, 'adapters/chaturbate.js');
+  const adapter = context.SisiPlus.getAdapter('chaturbate');
+  const names = adapter.extractFollowedNames('<div data-room="alice_live"></div><a data-username="bob_live"></a>');
+  assert.deepEqual(Array.from(names).sort(), ['alice_live', 'bob_live']);
+  assert.equal(adapter.getCapabilities().favorites, true);
+});
+
+test('Stripchat account adapter validates a session and merges online/offline favorites', async () => {
+  const model = { id: 7, username: 'online_favorite', status: 'public', stream: { url: 'https://cdn.example/live.m3u8' } };
+  const offline = { id: 8, username: 'offline_favorite', status: 'offline' };
+  const context = makeContext({
+    fetch: async (url) => {
+      const href = String(url);
+      if (href.includes('/config/dynamic')) {
+        return new Response(JSON.stringify({ dynamic: { jwtToken: 'jwt-demo' }, user: { username: 'viewer', isGuest: false } }), { status: 200 });
+      }
+      if (href.includes('/favorites/offline')) return new Response(JSON.stringify({ models: [offline] }), { status: 200 });
+      return new Response(JSON.stringify({ models: new URL(href).searchParams.get('limit') === '1' ? [] : [model] }), { status: 200 });
+    }
+  });
+  load(context, 'api.js');
+  load(context, 'adapter-utils.js');
+  load(context, 'settings.js');
+  load(context, 'core.js');
+  load(context, 'adapters/stripchat.js');
+  const adapter = context.SisiPlus.getAdapter('stripchat');
+  const status = await adapter.validateSession('sid=demo');
+  const favorites = await adapter.getFavorites('sid=demo');
+  assert.deepEqual({ valid: status.valid, account: status.account }, { valid: true, account: 'viewer' });
+  assert.deepEqual(Array.from(favorites, (item) => item.title), ['online_favorite', 'offline_favorite']);
+  assert.equal(favorites[1].offline, true);
 });
 
 test('player respects the quality selected in Lampa', () => {

@@ -9,6 +9,8 @@
   class ChaturbateAdapter extends app.Adapter {
     constructor() { super('chaturbate'); this.models = new Map(); }
     getName() { return 'Chaturbate'; }
+    getCapabilities() { return { account: true, favorites: true, liveTv: true }; }
+    getLiveTVItems(options = {}) { return this.getList('all', options.page || 1, {}); }
     getCategories() {
       return Promise.resolve([
         { id: 'all', title: 'Популярные', group: 'type' }, { id: 'f', title: 'Девушки', group: 'type' },
@@ -84,6 +86,88 @@
         }
       }
       return { title: item.title || username, poster: item.poster || '', streams: stream ? { HLS: stream } : {}, webpageUrl: pageUrl, headers: { Referer: `${SITE}/` } };
+    }
+
+    sessionCookie(session) {
+      const value = String(session || '').replace(/^cookie\s*:\s*/i, '').trim();
+      return [value, 'agreeterms=1', 'over18=1'].filter(Boolean).join('; ');
+    }
+
+    async accountPage(session) {
+      return app.Api.siteText(`${SITE}/followed-cams/`, {
+        referer: `${SITE}/`, proxy: 'never', retries: 0,
+        headers: { Cookie: this.sessionCookie(session) }
+      });
+    }
+
+    async validateSession(session) {
+      const html = await this.accountPage(session);
+      if (/cf-chl-|captcha|just a moment/i.test(html)) throw new Error('Chaturbate запросил дополнительную проверку браузера');
+      if (/\/auth\/login\/?|name=["']password["']/i.test(html)) {
+        return { valid: false, message: 'Сессия Chaturbate недействительна или истекла' };
+      }
+      const accountPatterns = [
+        /data-current-user=["']([^"']+)["']/i,
+        /["'](?:viewer_username|current_username)["']\s*:\s*["']([^"']+)["']/i,
+        /\/accounts\/user\/([^/"']+)/i
+      ];
+      let account = '';
+      for (const pattern of accountPatterns) {
+        const match = html.match(pattern);
+        if (match) { account = match[1]; break; }
+      }
+      return { valid: true, account };
+    }
+
+    extractFollowedNames(payload) {
+      const names = new Set();
+      const text = typeof payload === 'string' ? payload : JSON.stringify(payload || {});
+      const patterns = [
+        /data-(?:room|roomname|username)=["']([a-z0-9_\-]{2,64})["']/gi,
+        /["'](?:room|room_name|roomname)["']\s*:\s*["']([a-z0-9_\-]{2,64})["']/gi
+      ];
+      if (!/<(?:html|body|div|a)\b/i.test(text)) {
+        patterns.push(/["']username["']\s*:\s*["']([a-z0-9_\-]{2,64})["']/gi);
+      }
+      patterns.forEach((pattern) => {
+        let match;
+        while ((match = pattern.exec(text))) {
+          const name = match[1].toLowerCase();
+          names.add(name);
+        }
+      });
+      return names;
+    }
+
+    async getFavorites(session) {
+      const html = await this.accountPage(session);
+      if (/\/auth\/login\/?|name=["']password["']/i.test(html)) {
+        const error = new Error('Сессия Chaturbate истекла');
+        error.status = 401;
+        throw error;
+      }
+      const names = this.extractFollowedNames(html);
+      // В некоторых сборках сайт подгружает подписки отдельным room-list запросом.
+      if (!names.size) {
+        try {
+          const roomList = await app.Api.siteText(`${SITE}/api/ts/roomlist/room-list/?follow=true&limit=500&offset=0`, {
+            referer: `${SITE}/followed-cams/`, proxy: 'never', retries: 0,
+            headers: { Cookie: this.sessionCookie(session), 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          this.extractFollowedNames(roomList).forEach((name) => names.add(name));
+        } catch (error) {}
+      }
+      if (!names.size) return [];
+      const feed = await this.requestModels('all', 0, 500);
+      const online = new Map((feed.results || []).map((model) => [String(model.username).toLowerCase(), model]));
+      return Array.from(names, (name) => {
+        const model = online.get(name);
+        if (model && (!model.current_show || model.current_show === 'public')) return this.mapModel(model);
+        return {
+          id: name, title: name, poster: '', background: '', badge: 'OFFLINE',
+          offline: true, webpageUrl: `${SITE}/${encodeURIComponent(name)}/`
+        };
+      }).sort((left, right) => Number(left.offline) - Number(right.offline));
     }
   }
   app.registerAdapter(new ChaturbateAdapter());

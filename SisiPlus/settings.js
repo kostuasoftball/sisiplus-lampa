@@ -21,7 +21,13 @@
     return storageGet(`sisiplus_${name}`, fallback);
   }
 
-  function addParam(param, field) {
+  function set(name, value) {
+    if (!global.Lampa || !Lampa.Storage) return value;
+    Lampa.Storage.set(`sisiplus_${name}`, value);
+    return value;
+  }
+
+  function addParam(param, field, events = {}) {
     if (!global.Lampa || !Lampa.SettingsApi) return;
     // Lampa registers both `select` and `input` through Params.select().
     // Its input renderer expects values[name] to be a string. If it is left
@@ -30,7 +36,26 @@
     if (normalizedParam.type === 'input' && typeof normalizedParam.values !== 'string') {
       normalizedParam.values = '';
     }
-    Lampa.SettingsApi.addParam({ component, param: normalizedParam, field });
+    Lampa.SettingsApi.addParam({ component, param: normalizedParam, field, ...events });
+  }
+
+  function accountStatusText(status) {
+    const icons = { none: '⚪', unknown: '⚪', checking: '🟡', ready: '🟢', invalid: '🔴', error: '🟠', unsupported: '⚪' };
+    return `${icons[status.state] || '⚪'} ${status.message || 'Не настроено'}`;
+  }
+
+  function updateDescription(item, text) {
+    if (!item) return;
+    try {
+      if (typeof item.find === 'function') {
+        const description = item.find('.settings-param__descr');
+        if (description && typeof description.text === 'function') description.text(text);
+        return;
+      }
+      const root = item[0] || item;
+      const description = root.querySelector && root.querySelector('.settings-param__descr');
+      if (description) description.textContent = text;
+    } catch (error) {}
   }
 
   function init() {
@@ -75,6 +100,14 @@
       },
       { name: 'Глубина поиска', description: 'Большая глубина точнее, но создаёт больше запросов.' }
     );
+    addParam(
+      {
+        name: 'sisiplus_livetv_interval', type: 'select',
+        values: { 0: 'выключено', 5: '5 секунд', 10: '10 секунд', 15: '15 секунд', 30: '30 секунд' },
+        default: 10
+      },
+      { name: 'Live TV: автопереключение', description: 'Интервал смены модели во внутреннем плеере. Ручные кнопки работают всегда.' }
+    );
   }
 
   function registerAdapter(adapter) {
@@ -84,11 +117,44 @@
       { name: `sisiplus_adapter_${adapter.id}`, type: 'trigger', default: true },
       { name: adapter.getName(), description: 'Показывать этот источник в SisiPlus.' }
     );
+    const capabilities = typeof adapter.getCapabilities === 'function' ? adapter.getCapabilities() : {};
+    if (capabilities.account && app.Auth) registerAccount(adapter);
+  }
+
+  function registerAccount(adapter) {
+    addParam(
+      { type: 'title' },
+      { name: `Аккаунт ${adapter.getName()}` }
+    );
+    addParam(
+      { name: `sisiplus_account_add_${adapter.id}`, type: 'button' },
+      { name: 'Добавить или обновить сессию', description: 'Вставьте Cookie из уже авторизованного браузера. Пароль плагин не хранит.' },
+      { onChange: () => app.Auth.prompt(adapter) }
+    );
+    let statusItem = null;
+    let unsubscribe = null;
+    addParam(
+      { name: `sisiplus_account_check_${adapter.id}`, type: 'button' },
+      { name: 'Проверить подключение', description: accountStatusText(app.Auth.getState(adapter.id)) },
+      {
+        onChange: () => app.Auth.validate(adapter),
+        onRender(item) {
+          statusItem = item;
+          if (unsubscribe) unsubscribe();
+          unsubscribe = app.Auth.follow(adapter.id, (status) => updateDescription(statusItem, accountStatusText(status)));
+        }
+      }
+    );
+    addParam(
+      { name: `sisiplus_account_clear_${adapter.id}`, type: 'button' },
+      { name: 'Удалить данные аккаунта', description: 'Удаляет сохранённую сессию только с этого устройства.' },
+      { onChange: () => app.Auth.clear(adapter) }
+    );
   }
 
   function isAdapterEnabled(id) {
     return get(`adapter_${id}`, true) !== false;
   }
 
-  app.Settings = { init, registerAdapter, get, isAdapterEnabled };
+  app.Settings = { init, registerAdapter, get, set, isAdapterEnabled };
 })(window);

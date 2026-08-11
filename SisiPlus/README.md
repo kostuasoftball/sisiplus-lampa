@@ -11,6 +11,7 @@ https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-1.0.0.js
 https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-1.0.1.js
 https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-1.0.2.js
 https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-beta-1.0.0.js
+https://kostuasoftball.github.io/sisiplus-lampa/SisiPlus/dist/sisiplus-beta-1.0.1.js
 ```
 
 Каждая ссылка содержит всю сборку и не зависит от дополнительного загрузчика. `dist/sisiplus.js` остаётся полной копией стабильной версии 1.0.2 для обратной совместимости.

@@ -74,6 +74,29 @@ test('Live TV is capability-driven and enabled only for the three requested adap
   assert.equal(context.SisiPlus.getAdapter('runetki').getCapabilities().liveTv, false);
 });
 
+test('Live TV fills a unique queue to at least fifty models without remote-arrow interception', async () => {
+  const context = makeContext({ SisiPlus: {} });
+  load(context, 'livetv.js');
+  const pages = [];
+  const adapter = {
+    id: 'demo',
+    async getLiveTVItems({ page }) {
+      pages.push(page);
+      const start = (page - 1) * 30;
+      return {
+        items: Array.from({ length: 30 }, (_, index) => ({ id: String(start + index), title: `Model ${start + index}` })),
+        page,
+        totalPages: 3
+      };
+    }
+  };
+  const queue = await context.SisiPlus.LiveTV.loadQueue(adapter);
+  assert.equal(queue.length, 60);
+  assert.deepEqual(pages, [1, 2]);
+  const source = fs.readFileSync(path.join(root, 'livetv.js'), 'utf8');
+  assert.equal(source.includes("addEventListener('keydown'"), false);
+});
+
 test('account session is optional, local, and can be cleared without affecting adapters', () => {
   const values = new Map();
   const context = makeContext({

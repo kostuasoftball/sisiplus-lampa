@@ -2,6 +2,9 @@
   'use strict';
 
   const app = global.SisiPlus = global.SisiPlus || {};
+  const TARGET_QUEUE_SIZE = 50;
+  const MAX_QUEUE_SIZE = 100;
+  const MAX_QUEUE_PAGES = 5;
   let session = null;
   let styleReady = false;
 
@@ -52,6 +55,11 @@
     injectStyle();
     const root = unwrapPlayer();
     if (!root || typeof root.querySelector !== 'function') return;
+    if (session.manualMode) {
+      const previous = root.querySelector('.sisiplus-livetv-overlay');
+      if (previous) previous.remove();
+      return;
+    }
     let overlay = root.querySelector('.sisiplus-livetv-overlay');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -64,10 +72,10 @@
     const status = overlay.querySelector('.sisiplus-livetv-overlay__status');
     if (title) title.textContent = `${session.adapter.getName()} · ${current.title || 'Live TV'}`;
     if (status) status.textContent = session.timerPaused
-      ? `Таймер на паузе (${session.remaining} сек.) · Play — продолжить · ◀ / ▶ — переключить`
+      ? `Таймер остановлен (${session.remaining} сек.) · после Play останется ручной режим`
       : session.seconds > 0
-      ? `Следующая через ${session.remaining} сек. · ◀ / ▶ — переключить · Pause — остановить таймер`
-      : 'Автопереключение выключено · используйте кнопки ◀ / ▶';
+      ? `Следующая через ${session.remaining} сек. · Pause, затем Play — отключить автоматику`
+      : 'Автопереключение выключено · используйте кнопки плеера';
   }
 
   function clearTimer() {
@@ -79,10 +87,8 @@
   function stop() {
     if (!session) return;
     clearTimeout(session.closeTimer);
+    clearTimeout(session.pauseDetectTimer);
     clearTimer();
-    if (session.keyHandler && typeof document !== 'undefined') {
-      document.removeEventListener('keydown', session.keyHandler, true);
-    }
     const root = unwrapPlayer();
     if (root && root.querySelector) {
       const overlay = root.querySelector('.sisiplus-livetv-overlay');
@@ -113,7 +119,7 @@
     clearTimer();
     if (reset || !Number.isFinite(session.remaining)) session.remaining = session.seconds;
     renderOverlay();
-    if (!session.seconds || session.timerPaused) return;
+    if (!session.seconds || session.timerPaused || session.manualMode) return;
     session.timer = setInterval(() => {
       if (!session) return;
       session.remaining -= 1;
@@ -209,33 +215,23 @@
     }
   }
 
-  function next() { return session ? selectAt(session.index + 1) : false; }
-  function prev() { return session ? selectAt(session.index - 1) : false; }
-
-  function setTimerPaused(paused) {
-    if (!session || !session.seconds) return;
-    session.timerPaused = Boolean(paused);
-    if (session.timerPaused) clearTimer();
-    else restartTimer(false);
-    renderOverlay();
-  }
-
-  function bindRemoteKeys() {
-    if (!session || typeof document === 'undefined') return;
-    session.keyHandler = (event) => {
-      if (!session || event.repeat) return;
-      const key = event.key || event.code;
-      const keyCode = Number(event.keyCode || event.which || 0);
-      const forward = key === 'ArrowRight' || key === 'MediaTrackNext' || key === 'PageDown' || keyCode === 176;
-      const backward = key === 'ArrowLeft' || key === 'MediaTrackPrevious' || key === 'PageUp' || keyCode === 177;
-      if (!forward && !backward) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
-      if (forward) next();
-      else prev();
-    };
-    document.addEventListener('keydown', session.keyHandler, true);
+  async function loadQueue(adapter) {
+    const unique = new Map();
+    for (let page = 1; page <= MAX_QUEUE_PAGES && unique.size < TARGET_QUEUE_SIZE; page += 1) {
+      try {
+        const result = await adapter.getLiveTVItems({ page, limit: 72 });
+        const pageItems = (Array.isArray(result) ? result : (result && result.items) || [])
+          .filter((item) => item && item.id);
+        pageItems.forEach((item) => unique.set(String(item.id), item));
+        if (!pageItems.length) break;
+        if (result && !Array.isArray(result) && result.totalPages && page >= result.totalPages) break;
+      } catch (error) {
+        if (!unique.size) throw error;
+        console.warn(`[SisiPlus:${adapter.id}:livetv] не удалось добрать страницу очереди`, error);
+        break;
+      }
+    }
+    return Array.from(unique.values()).slice(0, MAX_QUEUE_SIZE);
   }
 
   async function start(adapter) {
@@ -249,15 +245,14 @@
     if (Lampa.Loading) Lampa.Loading.start();
     stop();
     try {
-      const result = await adapter.getLiveTVItems({ page: 1, limit: 72 });
-      const items = (Array.isArray(result) ? result : (result && result.items) || [])
-        .filter((item) => item && item.id).slice(0, 72);
+      const items = await loadQueue(adapter);
       if (!items.length) throw new Error('Источник не вернул доступных онлайн-моделей');
       const first = await resolvePlayable(adapter, items, 0, Math.min(items.length, 10));
       if (first.index) items.push(...items.splice(0, first.index));
       session = {
         adapter, items, playlist: [], index: 0, timer: 0, closeTimer: 0,
-        seconds: intervalSeconds(), remaining: intervalSeconds(), timerPaused: false, keyHandler: null
+        seconds: intervalSeconds(), remaining: intervalSeconds(), timerPaused: false,
+        manualMode: false, pauseDetectTimer: 0
       };
       session.playlist = items.map((item, index) => streamItem(item, adapter, index));
       // Первый поток разрешается заранее: Player.play ожидает строковый URL.
@@ -268,7 +263,6 @@
         quality: { ...(firstVideo.streams || {}) },
         headers: firstVideo.headers || undefined
       });
-      bindRemoteKeys();
       playAt(0);
       return true;
     } catch (error) {
@@ -306,10 +300,35 @@
     });
     Lampa.Player.listener.follow('external', stop);
     if (Lampa.PlayerVideo && Lampa.PlayerVideo.listener) {
-      Lampa.PlayerVideo.listener.follow('pause', () => setTimerPaused(true));
-      Lampa.PlayerVideo.listener.follow('play', () => setTimerPaused(false));
+      // При смене пункта плейлиста Lampa кратковременно посылает pause/play.
+      // Задержка отделяет этот технический переход от настоящей паузы пользователя.
+      Lampa.PlayerVideo.listener.follow('pause', () => {
+        if (!session || session.manualMode) return;
+        clearTimeout(session.pauseDetectTimer);
+        session.pauseDetectTimer = setTimeout(() => {
+          if (!session || session.manualMode) return;
+          const video = Lampa.PlayerVideo.video && Lampa.PlayerVideo.video();
+          if (video && video.paused) {
+            session.timerPaused = true;
+            clearTimer();
+            renderOverlay();
+          }
+        }, 250);
+      });
+      Lampa.PlayerVideo.listener.follow('play', () => {
+        if (!session) return;
+        clearTimeout(session.pauseDetectTimer);
+        session.pauseDetectTimer = 0;
+        if (session.timerPaused) {
+          // Pause → Play является явным переходом пользователя в ручной режим.
+          session.timerPaused = false;
+          session.manualMode = true;
+          clearTimer();
+          renderOverlay();
+        }
+      });
     }
   }
 
-  app.LiveTV = { init, start, stop, card, intervalSeconds, triggerButton, next, prev, setTimerPaused };
+  app.LiveTV = { init, start, stop, card, intervalSeconds, triggerButton, loadQueue };
 })(window);

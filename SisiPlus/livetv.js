@@ -63,8 +63,10 @@
     const title = overlay.querySelector('.sisiplus-livetv-overlay__title');
     const status = overlay.querySelector('.sisiplus-livetv-overlay__status');
     if (title) title.textContent = `${session.adapter.getName()} · ${current.title || 'Live TV'}`;
-    if (status) status.textContent = session.seconds > 0
-      ? `Следующая через ${session.remaining} сек. · кнопки плеера ◀ / ▶`
+    if (status) status.textContent = session.timerPaused
+      ? `Таймер на паузе (${session.remaining} сек.) · Play — продолжить · ◀ / ▶ — переключить`
+      : session.seconds > 0
+      ? `Следующая через ${session.remaining} сек. · ◀ / ▶ — переключить · Pause — остановить таймер`
       : 'Автопереключение выключено · используйте кнопки ◀ / ▶';
   }
 
@@ -78,6 +80,9 @@
     if (!session) return;
     clearTimeout(session.closeTimer);
     clearTimer();
+    if (session.keyHandler && typeof document !== 'undefined') {
+      document.removeEventListener('keydown', session.keyHandler, true);
+    }
     const root = unwrapPlayer();
     if (root && root.querySelector) {
       const overlay = root.querySelector('.sisiplus-livetv-overlay');
@@ -103,12 +108,12 @@
     return false;
   }
 
-  function restartTimer() {
+  function restartTimer(reset = true) {
     if (!session) return;
     clearTimer();
-    session.remaining = session.seconds;
+    if (reset || !Number.isFinite(session.remaining)) session.remaining = session.seconds;
     renderOverlay();
-    if (!session.seconds) return;
+    if (!session.seconds || session.timerPaused) return;
     session.timer = setInterval(() => {
       if (!session) return;
       session.remaining -= 1;
@@ -116,9 +121,9 @@
       if (session.remaining > 0) return;
       session.remaining = session.seconds;
       if (session.index >= session.playlist.length - 1) {
-        playAt(0);
+        selectAt(0);
       } else if (!triggerButton('.player-panel__next')) {
-        playAt(session.index + 1);
+        selectAt(session.index + 1);
       }
     }, 1000);
   }
@@ -182,6 +187,57 @@
     }
   }
 
+  function selectAt(index) {
+    if (!session || !session.playlist.length) return false;
+    const normalized = (index + session.playlist.length) % session.playlist.length;
+    const item = session.playlist[normalized];
+    try {
+      if (Lampa.PlayerPlaylist && Lampa.PlayerPlaylist.listener) {
+        Lampa.PlayerPlaylist.listener.send('select', {
+          playlist: session.playlist, position: normalized, item
+        });
+      } else {
+        playAt(normalized);
+      }
+      session.index = normalized;
+      session.remaining = session.seconds;
+      renderOverlay();
+      return true;
+    } catch (error) {
+      console.error('[SisiPlus:LiveTV:select]', error);
+      return false;
+    }
+  }
+
+  function next() { return session ? selectAt(session.index + 1) : false; }
+  function prev() { return session ? selectAt(session.index - 1) : false; }
+
+  function setTimerPaused(paused) {
+    if (!session || !session.seconds) return;
+    session.timerPaused = Boolean(paused);
+    if (session.timerPaused) clearTimer();
+    else restartTimer(false);
+    renderOverlay();
+  }
+
+  function bindRemoteKeys() {
+    if (!session || typeof document === 'undefined') return;
+    session.keyHandler = (event) => {
+      if (!session || event.repeat) return;
+      const key = event.key || event.code;
+      const keyCode = Number(event.keyCode || event.which || 0);
+      const forward = key === 'ArrowRight' || key === 'MediaTrackNext' || key === 'PageDown' || keyCode === 176;
+      const backward = key === 'ArrowLeft' || key === 'MediaTrackPrevious' || key === 'PageUp' || keyCode === 177;
+      if (!forward && !backward) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+      if (forward) next();
+      else prev();
+    };
+    document.addEventListener('keydown', session.keyHandler, true);
+  }
+
   async function start(adapter) {
     const capabilities = adapter && typeof adapter.getCapabilities === 'function' ? adapter.getCapabilities() : {};
     if (!capabilities.liveTv || typeof adapter.getLiveTVItems !== 'function') {
@@ -199,7 +255,10 @@
       if (!items.length) throw new Error('Источник не вернул доступных онлайн-моделей');
       const first = await resolvePlayable(adapter, items, 0, Math.min(items.length, 10));
       if (first.index) items.push(...items.splice(0, first.index));
-      session = { adapter, items, playlist: [], index: 0, timer: 0, closeTimer: 0, seconds: intervalSeconds(), remaining: intervalSeconds() };
+      session = {
+        adapter, items, playlist: [], index: 0, timer: 0, closeTimer: 0,
+        seconds: intervalSeconds(), remaining: intervalSeconds(), timerPaused: false, keyHandler: null
+      };
       session.playlist = items.map((item, index) => streamItem(item, adapter, index));
       // Первый поток разрешается заранее: Player.play ожидает строковый URL.
       const firstVideo = first.video;
@@ -209,6 +268,7 @@
         quality: { ...(firstVideo.streams || {}) },
         headers: firstVideo.headers || undefined
       });
+      bindRemoteKeys();
       playAt(0);
       return true;
     } catch (error) {
@@ -245,7 +305,11 @@
       session.closeTimer = setTimeout(stop, 1500);
     });
     Lampa.Player.listener.follow('external', stop);
+    if (Lampa.PlayerVideo && Lampa.PlayerVideo.listener) {
+      Lampa.PlayerVideo.listener.follow('pause', () => setTimerPaused(true));
+      Lampa.PlayerVideo.listener.follow('play', () => setTimerPaused(false));
+    }
   }
 
-  app.LiveTV = { init, start, stop, card, intervalSeconds, triggerButton };
+  app.LiveTV = { init, start, stop, card, intervalSeconds, triggerButton, next, prev, setTimerPaused };
 })(window);

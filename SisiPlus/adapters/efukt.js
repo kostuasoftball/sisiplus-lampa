@@ -57,7 +57,17 @@
       return output;
     }
     async load(url, page) {
-      const items = this.parseCards(await app.Api.siteText(url, { referer: `${SITE}/` }));
+      let html = await app.Api.siteText(url, { referer: `${SITE}/`, retries: 0 });
+      let items = this.parseCards(html);
+      if (!items.length) {
+        // На некоторых Android TV native-транспорт возвращает challenge/редирект
+        // как успешный HTTP-ответ. Api уже не может отличить его от каталога,
+        // поэтому валидируем именно результат парсинга и принудительно повторяем
+        // запрос через CORS-прокси.
+        html = await app.Api.siteText(url, { referer: `${SITE}/`, proxy: 'always', retries: 0 });
+        items = this.parseCards(html);
+      }
+      if (!items.length) throw new Error('eFukt вернул страницу без карточек даже через резервное соединение');
       return U.result(items, page, items.length >= 8 ? page + 1 : page);
     }
     getList(category = 'latest', page = 1) {
@@ -71,9 +81,13 @@
     async getVideo(id, item = {}) {
       const card = item.webpageUrl ? item : this.items.get(String(id));
       const pageUrl = card && card.webpageUrl ? card.webpageUrl : SITE;
-      const html = await app.Api.siteText(pageUrl, { referer: `${SITE}/` });
-      const source = html.match(/<source[^>]+src="([^"]+\.(?:mp4|m3u8)[^"]*)"/i);
-      const poster = (html.match(/<video[^>]+poster="([^"]+)"/i) || [])[1];
+      let html = await app.Api.siteText(pageUrl, { referer: `${SITE}/`, retries: 0 });
+      let source = html.match(/<source[^>]+src=["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/i);
+      if (!source) {
+        html = await app.Api.siteText(pageUrl, { referer: `${SITE}/`, proxy: 'always', retries: 0 });
+        source = html.match(/<source[^>]+src=["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/i);
+      }
+      const poster = (html.match(/<video[^>]+poster=["']([^"']+)["']/i) || [])[1];
       const stream = source ? U.decodeHtml(source[1]) : '';
       return { title: card ? card.title : 'eFukt', poster: poster || (card && card.poster) || '', streams: stream ? { original: stream } : {}, webpageUrl: pageUrl, headers: { Referer: `${SITE}/` } };
     }

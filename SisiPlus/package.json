@@ -1,6 +1,6 @@
 {
   "name": "sisiplus-lampa-plugin",
-  "version": "1.1.0-exp.1",
+  "version": "beta-1.0.1",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.cjs",

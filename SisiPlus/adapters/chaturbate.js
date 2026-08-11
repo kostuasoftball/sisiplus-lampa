@@ -34,7 +34,7 @@
       const item = {
         id: model.username, title: model.display_name || model.username,
         poster: model.image_url_360x270 || model.image_url || '', background: model.image_url || '',
-        badge: [model.is_hd ? 'HD' : '', model.num_users ? `${model.num_users} зр.` : '', country ? U.countryLabel(country) : ''].filter(Boolean).join(' · '),
+        badge: model.num_users ? `${model.num_users} зр.` : (model.is_hd ? 'HD' : 'LIVE'),
         webpageUrl: `${SITE}/${encodeURIComponent(model.username)}/`, country, sourceData: model
       };
       this.models.set(model.username, model);

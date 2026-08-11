@@ -153,6 +153,25 @@ test('eFukt uses its canonical host and parses cards regardless of attribute ord
   assert.equal(requests.some((url) => url.startsWith('https://www.efukt.com')), false);
 });
 
+test('eFukt retries through the proxy when Android returns a successful challenge page', async () => {
+  const listing = '<a class="thumb" href="https://efukt.com/24738_Proxy_Works.html" title="Proxy works" style="background-image:url(\'https://servei.efukt.com/proxy.jpg\')"></a>';
+  const requests = [];
+  const context = makeContext({
+    fetch: async (url) => {
+      requests.push(String(url));
+      return new Response(String(url).includes('cherry-proxy') ? listing : '<title>Just a moment...</title>', { status: 200 });
+    }
+  });
+  load(context, 'api.js');
+  load(context, 'adapter-utils.js');
+  load(context, 'settings.js');
+  load(context, 'core.js');
+  load(context, 'adapters/efukt.js');
+  const result = await context.SisiPlus.getAdapter('efukt').getList('latest', 1);
+  assert.equal(result.items[0].title, 'Proxy works');
+  assert.equal(requests.some((url) => url.includes('cherry-proxy')), true);
+});
+
 test('settings are compatible with Lampa input rendering and contain no age gate', () => {
   const params = [];
   const context = makeContext({
@@ -216,6 +235,22 @@ test('Stripchat adapter maps API cards and stream qualities to the common contra
   assert.equal(result.items[0].preview, model.previewUrl);
   assert.equal(video.streams['480p'], model.stream.url);
   assert.match(video.webpageUrl, /contract_demo$/);
+});
+
+test('Stripchat country filter removes rooms appended by the upstream API', async () => {
+  const context = makeContext({
+    fetch: async () => new Response(JSON.stringify({ models: [
+      { id: 1, username: 'japan_room', modelsCountry: 'japanese', status: 'public' },
+      { id: 2, username: 'random_room', modelsCountry: 'german', status: 'public' }
+    ], total: 2 }), { status: 200 })
+  });
+  load(context, 'api.js');
+  load(context, 'adapter-utils.js');
+  load(context, 'settings.js');
+  load(context, 'core.js');
+  load(context, 'adapters/stripchat.js');
+  const result = await context.SisiPlus.getAdapter('stripchat').getList('popular', 1, { country: 'jp' });
+  assert.deepEqual(Array.from(result.items, (item) => item.title), ['japan_room']);
 });
 
 test('Chaturbate omits hidden rooms and parses its unicode-escaped room dossier', async () => {
@@ -297,6 +332,31 @@ test('player respects the quality selected in Lampa', () => {
     original: 'https://cdn.example/original.m3u8'
   });
   assert.equal(selected, 'https://cdn.example/720.m3u8');
+});
+
+test('player registers independent card contexts and forces the internal Lampa player', async () => {
+  let played;
+  let playlist;
+  const context = makeContext({
+    Lampa: {
+      Storage: { field: () => '', get: () => '' },
+      Player: {
+        play(item) { played = item; },
+        playlist(items) { playlist = items; }
+      }
+    }
+  });
+  load(context, 'player.js');
+  const items = [{ id: 'one', title: 'One' }, { id: 'two', title: 'Two' }];
+  const id = context.SisiPlus.Player.rememberItems('demo', items);
+  const adapter = {
+    id: 'demo', getName: () => 'Demo',
+    getVideo: async (itemId) => ({ title: itemId, streams: { HLS: `https://cdn.example/${itemId}.m3u8` } })
+  };
+  await context.SisiPlus.Player.playItem({ ...items[0], playbackContextId: id }, adapter);
+  assert.equal(played.launch_player, 'inner');
+  assert.equal(playlist.length, 2);
+  assert.equal(playlist[1].launch_player, 'inner');
 });
 
 test('loader propagates its version to every browser module', async () => {

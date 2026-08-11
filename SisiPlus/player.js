@@ -1,6 +1,8 @@
 (function sisiplusPlayer(global) {
   'use strict';
   const app = global.SisiPlus = global.SisiPlus || {};
+  const contexts = new Map();
+  let contextSequence = 0;
 
   function notify(message) {
     if (global.Lampa && Lampa.Noty) Lampa.Noty.show(message);
@@ -32,33 +34,91 @@
     return Object.keys(streams).map((key) => streams[key]).find(Boolean);
   }
 
-  function play(video) {
+  function videoEntry(video, fallback = {}) {
     const streams = video && video.streams ? video.streams : {};
-    const url = chooseDefault(streams);
-    if (!url || !global.Lampa || !Lampa.Player) {
-      if (video && openWebPage(video.webpageUrl)) return true;
-      notify('Прямой поток недоступен. Не удалось открыть и страницу источника.');
+    return {
+      title: video.title || fallback.title || 'SisiPlus',
+      url: chooseDefault(streams),
+      quality: { ...streams },
+      poster: video.poster || fallback.poster || '',
+      headers: video.headers || undefined,
+      // Не даём глобальной настройке внешнего проигрывателя увести пользователя
+      // из плейлиста: кнопки «предыдущее/следующее» есть только во внутреннем.
+      launch_player: 'inner'
+    };
+  }
+
+  function play(video, options = {}) {
+    const entry = videoEntry(video, options.fallback || {});
+    if (!entry.url || !global.Lampa || !Lampa.Player) {
+      notify('Прямой поток недоступен для внутреннего плеера. Страницу сайта можно открыть долгим нажатием на карточку.');
       return false;
     }
-    const quality = {};
-    Object.keys(streams).forEach((key) => { if (streams[key]) quality[key] = streams[key]; });
-    const item = {
-      title: video.title || 'SisiPlus',
-      url,
-      quality,
-      poster: video.poster || '',
-      headers: video.headers || undefined
-    };
+    const playlist = options.playlist && options.playlist.length ? options.playlist : [entry];
     try {
-      Lampa.Player.play(item);
-      Lampa.Player.playlist([item]);
+      Lampa.Player.play(entry);
+      Lampa.Player.playlist(playlist);
       return true;
     } catch (error) {
       console.error('[SisiPlus:player]', error);
-      if (openWebPage(video.webpageUrl)) return true;
       notify('Плеер Lampa не смог открыть поток');
       return false;
     }
+  }
+
+  /**
+   * Запоминает исходные элементы одной видимой сетки. Карточки хранят только
+   * короткий context id, поэтому любой независимый адаптер автоматически
+   * получает плейлист и кнопки «предыдущее/следующее» без специальных условий.
+   */
+  function rememberItems(adapterId, items) {
+    const id = `${adapterId}:${Date.now()}:${++contextSequence}`;
+    contexts.set(id, {
+      adapterId,
+      items: (items || []).filter((item) => item && item.id && !item.sisiplusAction).slice()
+    });
+    // Экранов одновременно открыто немного, но ограничение защищает долгую сессию ТВ.
+    if (contexts.size > 40) contexts.delete(contexts.keys().next().value);
+    return id;
+  }
+
+  async function resolvePlayable(adapter, items, start, attempts) {
+    const count = Math.min(items.length, Math.max(1, attempts || 1));
+    let lastError;
+    for (let step = 0; step < count; step += 1) {
+      const index = (start + step) % items.length;
+      const item = items[index];
+      if (!item || item.offline) continue;
+      try {
+        const video = await adapter.getVideo(item.id, item);
+        if (chooseDefault((video && video.streams) || {})) return { video, item, index };
+      } catch (error) { lastError = error; }
+    }
+    throw lastError || new Error('Доступный поток не найден');
+  }
+
+  function lazyEntry(adapter, items, index) {
+    const source = items[index];
+    const entry = {
+      title: source.title || source.name || adapter.getName(),
+      poster: source.poster || '',
+      launch_player: 'inner'
+    };
+    entry.url = function resolveUrl(ready) {
+      resolvePlayable(adapter, items, index, Math.min(items.length, 8)).then(({ video, item }) => {
+        Object.assign(entry, videoEntry(video, item));
+        ready();
+      }).catch((error) => {
+        console.warn(`[SisiPlus:${adapter.id}:playlist]`, source.id, error);
+        notify('Следующий доступный поток не найден');
+        // Lampa блокирует дальнейшие переключения, пока callback lazy-url не вызван.
+        // Оставляем текущий поток URL-ом этой позиции и снимаем блокировку.
+        const current = Lampa.PlayerVideo && Lampa.PlayerVideo.video ? Lampa.PlayerVideo.video() : null;
+        entry.url = current && current.currentSrc ? current.currentSrc : 'about:blank';
+        ready();
+      });
+    };
+    return entry;
   }
 
   async function playItem(item, adapter) {
@@ -66,10 +126,17 @@
     if (app.UI && app.UI.Preview) app.UI.Preview.hide();
     if (global.Lampa && Lampa.Loading) Lampa.Loading.start();
     try {
-      return play(await adapter.getVideo(item.id, item));
+      const context = contexts.get(item.playbackContextId);
+      const items = context && context.adapterId === adapter.id && context.items.length
+        ? context.items
+        : [item];
+      const requestedIndex = Math.max(0, items.findIndex((entry) => String(entry.id) === String(item.id)));
+      const first = await resolvePlayable(adapter, items, requestedIndex, Math.min(items.length, 8));
+      const playlist = items.map((entry, index) => lazyEntry(adapter, items, index));
+      Object.assign(playlist[first.index], videoEntry(first.video, first.item));
+      return play(first.video, { playlist, fallback: first.item });
     } catch (error) {
       console.error(`[SisiPlus:${adapter.id}:video]`, error);
-      if (openWebPage(item.webpageUrl)) return true;
       notify(error.message || 'Не удалось получить видео');
       return false;
     } finally {
@@ -77,5 +144,5 @@
     }
   }
 
-  app.Player = { play, playItem, openWebPage, chooseDefault };
+  app.Player = { play, playItem, openWebPage, chooseDefault, rememberItems, resolvePlayable };
 })(window);

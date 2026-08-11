@@ -54,27 +54,54 @@
     mapModel(model) {
       this.models.set(String(model.id), model);
       const status = model.status === 'public' ? 'LIVE' : String(model.status || '').toUpperCase();
-      const country = String(model.modelsCountry || '').toLowerCase();
+      const country = this.modelCountry(model);
       return {
         id: String(model.id),
         title: model.username,
         poster: model.snapshotUrl || model.widgetPreviewUrl || model.avatarUrl || '',
         background: model.previewUrlThumbBig || model.previewUrl || model.snapshotUrl || '',
         preview: model.previewUrl || '',
-        badge: [status, model.viewersCount ? `${model.viewersCount} зр.` : '', country ? app.AdapterUtils.countryLabel(country) : ''].filter(Boolean).join(' · '),
+        badge: model.viewersCount ? `${model.viewersCount} зр.` : status,
         webpageUrl: `${SITE_URL}/${encodeURIComponent(model.username)}`,
         country,
         sourceData: model
       };
     }
 
+    modelCountry(model) {
+      return app.AdapterUtils.normalizeLanguage(
+        model.modelsCountry || model.country || model.countryCode || model.language || ''
+      );
+    }
+
     async getList(category = 'popular', page = 1, filters = {}) {
       const currentPage = Math.max(1, Number(page) || 1);
+      const country = filters.country && filters.country !== 'all' ? filters.country : '';
+      if (country) {
+        // Публичный endpoint Stripchat иногда лишь поднимает выбранную страну
+        // вверх, а затем добавляет комнаты других стран. Поэтому параметр API
+        // используется как подсказка, но окончательная фильтрация всегда наша.
+        const wanted = currentPage * PAGE_SIZE;
+        const found = [];
+        for (let batch = 0; batch < 3 && found.length < wanted; batch += 1) {
+          const data = await this.requestModels({
+            limit: SEARCH_PAGE_SIZE, offset: batch * SEARCH_PAGE_SIZE, tag: category, country
+          });
+          (data.models || []).forEach((model) => {
+            if (this.modelCountry(model) === country) found.push(model);
+          });
+          if (!(data.models || []).length) break;
+        }
+        const unique = Array.from(new Map(found.map((model) => [String(model.id), model])).values());
+        const start = (currentPage - 1) * PAGE_SIZE;
+        return {
+          items: unique.slice(start, start + PAGE_SIZE).map((model) => this.mapModel(model)),
+          page: currentPage,
+          totalPages: unique.length > start + PAGE_SIZE ? currentPage + 1 : currentPage
+        };
+      }
       const data = await this.requestModels({
-        limit: PAGE_SIZE,
-        offset: (currentPage - 1) * PAGE_SIZE,
-        tag: category,
-        country: filters.country || ''
+        limit: PAGE_SIZE, offset: (currentPage - 1) * PAGE_SIZE, tag: category
       });
       return {
         items: (data.models || []).map((model) => this.mapModel(model)),

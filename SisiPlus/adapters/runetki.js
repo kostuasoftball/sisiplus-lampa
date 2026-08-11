@@ -5,7 +5,7 @@
   class RunetkiAdapter extends Base {
     constructor() {
       super('runetki', {
-        name: 'Runetki', host: 'https://rus.runetki5.com', roomBase: 'https://runetki.com',
+        name: 'Runetki', host: 'https://rt.runetki.com', roomBase: 'https://runetki.com',
         stream: (edge, username) => `https://${edge}.bcvcdn.com/hls/stream_${username}/playlist.m3u8`
       });
     }

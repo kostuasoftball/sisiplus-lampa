@@ -99,10 +99,11 @@
     };
   }
 
-  function toLampaCard(item, adapterId) {
+  function toLampaCard(item, adapterId, playbackContextId = '') {
     const card = {
       ...item,
       adapterId,
+      playbackContextId,
       source: `sisiplus_${adapterId}`,
       name: item.title || item.name || String(item.id),
       title: item.title || item.name || String(item.id),
@@ -139,8 +140,11 @@
 
   function toCollection(result, adapterId) {
     const data = normalizeResult(result);
+    const playbackContextId = app.Player && typeof app.Player.rememberItems === 'function'
+      ? app.Player.rememberItems(adapterId, data.items)
+      : '';
     return {
-      results: data.items.map((item) => toLampaCard(item, adapterId)),
+      results: data.items.map((item) => toLampaCard(item, adapterId, playbackContextId)),
       page: data.page,
       total_pages: data.totalPages,
       collection: true,
@@ -245,7 +249,7 @@
       if (favoriteItems.length) {
         special.push(...splitMainLine({
           title: 'Избранные модели', category: { id: 'favorites', title: 'Избранные модели' },
-          results: favoriteItems.map((item) => toLampaCard(item, adapter.id)),
+          results: toCollection({ items: favoriteItems, page: 1, totalPages: 1 }, adapter.id).results,
           adapterId: adapter.id, nomore: true,
           card_events: {
             onEnter(card, item) { activateItem(item, adapter); },
@@ -339,9 +343,11 @@
   }
 
   function createMainComponent(object) {
-    return Lampa.Maker && typeof Lampa.Maker.make === 'function'
-      ? createMakerMainComponent(object)
-      : createLegacyMainComponent(object);
+    // Maker в Lampa 3.x сам добавляет модуль More даже к строкам nomore, а его
+    // Line.onVisible падает на строке Live TV из одной карточки. Кроме того,
+    // Maker поглощает крайнее нажатие вправо. Legacy Interaction — публичный
+    // API Lampa и именно на нём построена рабочая навигация оригинального Sisi.
+    return createLegacyMainComponent(object);
   }
 
   function askSearch(adapter) {
@@ -452,6 +458,12 @@
       Promise.resolve(load(object))
         .then((result) => {
           this.build(toCollection(result, adapter.id));
+          const root = this.render();
+          if (root && typeof root.find === 'function') {
+            root.find('.category-full')
+              .removeClass('cols--2 cols--3 cols--5 cols--6')
+              .addClass('mapping--grid cols--4 sisiplus-grid');
+          }
           this.activity.loader(false);
         })
         .catch((error) => empty(this, error));
@@ -499,9 +511,7 @@
   }
 
   function createListComponent(object) {
-    return Lampa.Maker && typeof Lampa.Maker.make === 'function'
-      ? createMakerListComponent(object)
-      : createLegacyListComponent(object);
+    return createLegacyListComponent(object);
   }
 
   function createSearchSource() {
@@ -511,7 +521,7 @@
         Promise.all(app.getAdapters().map(async (adapter) => {
           try {
             const result = normalizeResult(await adapter.search(params.query, 1, {}));
-            return result.items.map((item) => toLampaCard(item, adapter.id));
+            return toCollection(result, adapter.id).results;
           } catch (error) {
             console.warn(`[SisiPlus:${adapter.id}:search]`, error);
             return [];
@@ -533,6 +543,16 @@
 
   function installHeaderFilter() {
     if (typeof document === 'undefined' || !global.Lampa || !Lampa.Listener) return;
+    if (!document.querySelector('#sisiplus-ui-style') && document.head) {
+      const style = document.createElement('style');
+      style.id = 'sisiplus-ui-style';
+      style.textContent = [
+        'body.sisiplus-active .category-full.sisiplus-grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:1.2em 1em!important}',
+        'body.sisiplus-active .category-full.sisiplus-grid .card{width:auto!important;margin:0!important}',
+        'body.sisiplus-active .card__quality{font-size:.62em!important;line-height:1.05!important;padding:.22em .42em!important;max-height:1.55em!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}'
+      ].join('');
+      document.head.appendChild(style);
+    }
     if (document.querySelector('.sisiplus-head-filter')) return;
     const search = document.querySelector('.head .open--search');
     if (!search || !search.parentNode) return;
@@ -555,6 +575,7 @@
       const own = event.component === 'sisiplus_main' || event.component === 'sisiplus_list';
       active = own ? event.object : null;
       button.style.display = own ? '' : 'none';
+      if (document.body) document.body.classList.toggle('sisiplus-active', own);
     });
   }
 

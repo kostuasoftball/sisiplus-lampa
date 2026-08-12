@@ -27,7 +27,7 @@ function load(context, relativePath) {
 
 test('all browser modules have valid JavaScript syntax', () => {
   const files = [
-    'loader.js', 'api.js', 'adapter-utils.js', 'auth.js', 'player.js', 'livetv.js', 'ui.js', 'settings.js', 'core.js',
+    'loader.js', 'api.js', 'adapter-utils.js', 'auth.js', 'player.js', 'ui.js', 'settings.js', 'core.js',
     'adapters/live-base.js', 'adapters/pornhub.js', 'adapters/xvideos.js',
     'adapters/xhamster.js', 'adapters/efukt.js', 'adapters/bongacams.js',
     'adapters/runetki.js', 'adapters/chaturbate.js', 'adapters/stripchat.js'
@@ -59,7 +59,7 @@ test('all eight requested source adapters register independently', () => {
   });
 });
 
-test('Live TV is capability-driven and enabled only for the three requested adapters', () => {
+test('Live TV is removed from the core and all adapters', () => {
   const context = makeContext();
   load(context, 'api.js');
   load(context, 'adapter-utils.js');
@@ -67,34 +67,12 @@ test('Live TV is capability-driven and enabled only for the three requested adap
   load(context, 'core.js');
   ['adapters/live-base.js', 'adapters/bongacams.js', 'adapters/runetki.js', 'adapters/chaturbate.js', 'adapters/stripchat.js']
     .forEach((file) => load(context, file));
-  assert.deepEqual(
-    ['bongacams', 'chaturbate', 'stripchat'].map((id) => context.SisiPlus.getAdapter(id).getCapabilities().liveTv),
-    [true, true, true]
-  );
-  assert.equal(context.SisiPlus.getAdapter('runetki').getCapabilities().liveTv, false);
-});
-
-test('Live TV fills a unique queue to at least fifty models without remote-arrow interception', async () => {
-  const context = makeContext({ SisiPlus: {} });
-  load(context, 'livetv.js');
-  const pages = [];
-  const adapter = {
-    id: 'demo',
-    async getLiveTVItems({ page }) {
-      pages.push(page);
-      const start = (page - 1) * 30;
-      return {
-        items: Array.from({ length: 30 }, (_, index) => ({ id: String(start + index), title: `Model ${start + index}` })),
-        page,
-        totalPages: 3
-      };
-    }
-  };
-  const queue = await context.SisiPlus.LiveTV.loadQueue(adapter);
-  assert.equal(queue.length, 60);
-  assert.deepEqual(pages, [1, 2]);
-  const source = fs.readFileSync(path.join(root, 'livetv.js'), 'utf8');
-  assert.equal(source.includes("addEventListener('keydown'"), false);
+  ['bongacams', 'runetki', 'chaturbate', 'stripchat'].forEach((id) => {
+    const adapter = context.SisiPlus.getAdapter(id);
+    assert.notEqual(adapter.getCapabilities().liveTv, true);
+    assert.equal(typeof adapter.getLiveTVItems, 'undefined');
+  });
+  assert.equal(fs.existsSync(path.join(root, 'livetv.js')), false);
 });
 
 test('account session is optional, local, and can be cleared without affecting adapters', () => {
@@ -210,6 +188,9 @@ test('settings are compatible with Lampa input rendering and contain no age gate
   context.SisiPlus.Settings.init();
 
   assert.equal(params.some((param) => param.name === 'sisiplus_age_confirmed'), false);
+  const playerMode = params.find((param) => param.name === 'sisiplus_player_mode');
+  assert.equal(playerMode.default, 'external');
+  assert.deepEqual(Object.keys(playerMode.values), ['external', 'inner']);
   params.filter((param) => param.type === 'input').forEach((param) => {
     assert.equal(typeof param.values, 'string');
   });
@@ -357,7 +338,7 @@ test('player respects the quality selected in Lampa', () => {
   assert.equal(selected, 'https://cdn.example/720.m3u8');
 });
 
-test('player registers independent card contexts and forces the internal Lampa player', async () => {
+test('player uses the user external player by default without forcing Lampa inner', async () => {
   let played;
   let playlist;
   const context = makeContext({
@@ -377,9 +358,42 @@ test('player registers independent card contexts and forces the internal Lampa p
     getVideo: async (itemId) => ({ title: itemId, streams: { HLS: `https://cdn.example/${itemId}.m3u8` } })
   };
   await context.SisiPlus.Player.playItem({ ...items[0], playbackContextId: id }, adapter);
+  assert.equal(played.launch_player, undefined);
+  assert.equal(played.url, 'https://cdn.example/one.m3u8');
+  assert.equal(playlist, undefined);
+});
+
+test('internal player receives the current grid playlist and navigable entries', async () => {
+  let played;
+  let playlist;
+  let callback;
+  const context = makeContext({
+    SisiPlus: { Settings: { get: () => 'inner' } },
+    Lampa: {
+      Storage: { field: () => '', get: () => '' },
+      Controller: { toggle() {} },
+      Player: {
+        play(item) { played = item; },
+        playlist(items) { playlist = items; },
+        callback(handler) { callback = handler; }
+      }
+    }
+  });
+  load(context, 'player.js');
+  const items = [{ id: 'one', title: 'One' }, { id: 'two', title: 'Two' }];
+  const id = context.SisiPlus.Player.rememberItems('demo', items);
+  const adapter = {
+    id: 'demo', getName: () => 'Demo',
+    getVideo: async (itemId) => ({ title: itemId, streams: { HLS: `https://cdn.example/${itemId}.m3u8` } })
+  };
+  await context.SisiPlus.Player.playItem({ ...items[0], playbackContextId: id }, adapter);
   assert.equal(played.launch_player, 'inner');
+  assert.equal(played.sisiplusInternal, true);
   assert.equal(playlist.length, 2);
+  assert.equal(played.playlist.length, 2);
   assert.equal(playlist[1].launch_player, 'inner');
+  assert.equal(typeof playlist[1].url, 'function');
+  assert.equal(typeof callback, 'function');
 });
 
 test('loader propagates its version to every browser module', async () => {

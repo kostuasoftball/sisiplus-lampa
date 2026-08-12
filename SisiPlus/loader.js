@@ -7,9 +7,9 @@
   const script = document.currentScript;
   const baseUrl = new URL('.', script && script.src ? script.src : global.location.href);
   const scriptUrl = new URL(script && script.src ? script.src : global.location.href);
-  const version = scriptUrl.searchParams.get('v') || (script && script.dataset.version) || 'beta-1.0.1';
+  const version = scriptUrl.searchParams.get('v') || (script && script.dataset.version) || 'beta-1.0.2';
   global.SisiPlusVersion = version;
-  const coreModules = ['api.js', 'adapter-utils.js', 'auth.js', 'player.js', 'livetv.js', 'ui.js', 'settings.js', 'core.js'];
+  const coreModules = ['api.js', 'adapter-utils.js', 'auth.js', 'player.js', 'ui.js', 'settings.js', 'core.js'];
   const fallbackAdapterModules = [
     'adapters/live-base.js',
     'adapters/pornhub.js', 'adapters/xvideos.js', 'adapters/xhamster.js', 'adapters/efukt.js',

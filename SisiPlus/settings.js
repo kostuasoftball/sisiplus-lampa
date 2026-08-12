@@ -102,11 +102,11 @@
     );
     addParam(
       {
-        name: 'sisiplus_livetv_interval', type: 'select',
-        values: { 0: 'выключено', 5: '5 секунд', 10: '10 секунд', 15: '15 секунд', 30: '30 секунд' },
-        default: 10
+        name: 'sisiplus_player_mode', type: 'select',
+        values: { external: 'Внешний плеер пользователя', inner: 'Внутренний плеер Lampa' },
+        default: 'external'
       },
-      { name: 'Live TV: автопереключение', description: 'Интервал смены модели во внутреннем плеере. Ручные кнопки работают всегда.' }
+      { name: 'Плеер', description: 'По умолчанию используется выбранный пользователем внешний плеер Lampa. Внутренний режим поддерживает плейлист.' }
     );
   }
 

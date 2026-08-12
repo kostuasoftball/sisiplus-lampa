@@ -101,7 +101,7 @@
     lampaInitialized = true;
     app.Settings.init();
     adapters.forEach((adapter) => app.Settings.registerAdapter(adapter));
-    if (app.LiveTV) app.LiveTV.init();
+    if (app.Player && typeof app.Player.init === 'function') app.Player.init();
     Lampa.Component.add('sisiplus_main', app.UI.createMainComponent);
     Lampa.Component.add('sisiplus_list', app.UI.createListComponent);
     app.UI.installHeaderFilter();

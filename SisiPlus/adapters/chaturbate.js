@@ -9,8 +9,7 @@
   class ChaturbateAdapter extends app.Adapter {
     constructor() { super('chaturbate'); this.models = new Map(); }
     getName() { return 'Chaturbate'; }
-    getCapabilities() { return { account: true, favorites: true, liveTv: true }; }
-    getLiveTVItems(options = {}) { return this.getList('all', options.page || 1, {}); }
+    getCapabilities() { return { account: true, favorites: true }; }
     getCategories() {
       return Promise.resolve([
         { id: 'all', title: 'Популярные', group: 'type' }, { id: 'f', title: 'Девушки', group: 'type' },

@@ -121,7 +121,7 @@
           const selected = data || card;
           activateItem(selected, app.getAdapter(selected.adapterId));
         },
-        onLong(target, data) { showCardMenu(data || card, app.getAdapter(adapterId)); },
+        onLong(target, data) { showPlayerMenu(data || card, app.getAdapter(adapterId)); },
         onFocus(target, data) { Preview.show(target, data || card); }
       }
     };
@@ -130,7 +130,6 @@
 
   function activateItem(item, adapter) {
     if (!item || !adapter) return false;
-    if (item.sisiplusAction === 'livetv' && app.LiveTV) return app.LiveTV.start(adapter);
     if (item.offline) {
       if (global.Lampa && Lampa.Noty) Lampa.Noty.show(`${item.title}: модель сейчас не в сети`);
       return false;
@@ -185,8 +184,8 @@
   }
 
   function bindCard(card, item, adapter) {
-    card.onEnter = () => activateItem(item, adapter);
-    card.onMenu = () => showCardMenu(item, adapter);
+    card.onEnter = (target, data) => activateItem(data && data.id ? data : item, adapter);
+    card.onMenu = (target, data) => showPlayerMenu(data && data.id ? data : item, adapter);
     const originalFocus = card.onFocus;
     card.onFocus = (target, data) => {
       if (typeof originalFocus === 'function') originalFocus(target, data);
@@ -194,27 +193,21 @@
     };
   }
 
-  function showCardMenu(item, adapter) {
-    const options = [{ title: 'Открыть страницу источника', webpage: true }];
-    if (item.country && adapter) {
-      options.push({
-        title: `Показать: ${app.AdapterUtils.countryLabel(item.country)}`,
-        country: item.country
-      });
-    }
+  function showPlayerMenu(item, adapter) {
+    if (!item || !adapter) return;
+    const current = app.Player && typeof app.Player.mode === 'function' ? app.Player.mode() : 'external';
+    const options = [
+      { title: 'Внешний плеер пользователя', mode: 'external', selected: current === 'external' },
+      { title: 'Внутренний плеер Lampa', mode: 'inner', selected: current === 'inner' }
+    ];
     Lampa.Select.show({
-      title: item.title || item.name || 'SisiPlus',
+      title: 'Выбрать плеер',
       items: options,
       onBack: () => Lampa.Controller.toggle('content'),
       onSelect(option) {
         Lampa.Controller.toggle('content');
-        if (option.country) {
-          Lampa.Activity.push({
-            title: `${adapter.getName()} · ${app.AdapterUtils.countryLabel(option.country)}`,
-            component: 'sisiplus_list', adapterId: adapter.id, category: 'popular', page: 1,
-            filters: { country: option.country }
-          });
-        } else if (!app.Player.openWebPage(item.webpageUrl)) Lampa.Noty.show('Не удалось открыть страницу');
+        app.Settings.set('player_mode', option.mode);
+        app.Player.playItem(item, adapter, { mode: option.mode });
       }
     });
   }
@@ -234,7 +227,7 @@
           url: category.id,
           card_events: {
             onEnter(card, item) { activateItem(item, adapter); },
-            onMenu(card, item) { showCardMenu(item, adapter); }
+            onMenu(card, item) { showPlayerMenu(item, adapter); }
           }
         };
       } catch (error) {
@@ -253,18 +246,10 @@
           adapterId: adapter.id, nomore: true,
           card_events: {
             onEnter(card, item) { activateItem(item, adapter); },
-            onMenu(card, item) { showCardMenu(item, adapter); }
+            onMenu(card, item) { showPlayerMenu(item, adapter); }
           }
         }));
       }
-    }
-    if (capabilities.liveTv && app.LiveTV) {
-      special.push(...splitMainLine({
-        title: 'Live TV', category: { id: 'livetv', title: 'Live TV' },
-        results: [toLampaCard(app.LiveTV.card(adapter), adapter.id)],
-        adapterId: adapter.id, nomore: true,
-        card_events: { onEnter(card, item) { activateItem(item, adapter); } }
-      }));
     }
     const ready = special.concat(lines.filter((line) => line && line.results.length).flatMap((line) => splitMainLine(line)));
     if (!ready.length) throw new Error('Источник не вернул доступных моделей');
@@ -293,6 +278,8 @@
       category: line.category.id,
       page: 1
     });
+    component.filter = () => showListMenu(adapter, component, object);
+    component.onRight = component.filter;
     component.onAppend = (line) => {
       line.onAppend = (card) => {
         const originalFocus = card.onFocus;
@@ -302,8 +289,6 @@
         };
       };
     };
-    component.filter = () => showListMenu(adapter, component, object);
-    component.onRight = component.filter;
     return component;
   }
 
@@ -343,10 +328,9 @@
   }
 
   function createMainComponent(object) {
-    // Maker в Lampa 3.x сам добавляет модуль More даже к строкам nomore, а его
-    // Line.onVisible падает на строке Live TV из одной карточки. Кроме того,
-    // Maker поглощает крайнее нажатие вправо. Legacy Interaction — публичный
-    // API Lampa и именно на нём построена рабочая навигация оригинального Sisi.
+    // Maker в Lampa 3.x сам добавляет модуль More даже к строкам nomore и
+    // поглощает крайнее нажатие вправо. Legacy Interaction — публичный API
+    // Lampa и именно на нём построена рабочая навигация оригинального Sisi.
     return createLegacyMainComponent(object);
   }
 
@@ -536,7 +520,7 @@
       params: {
         lazy: true,
         align_left: true,
-        card_events: { onMenu(card, item) { showCardMenu(item, app.getAdapter(item.adapterId)); } }
+        card_events: { onMenu(card, item) { showPlayerMenu(item, app.getAdapter(item.adapterId)); } }
       }
     };
   }
@@ -577,6 +561,29 @@
       button.style.display = own ? '' : 'none';
       if (document.body) document.body.classList.toggle('sisiplus-active', own);
     });
+    // Keypad сообщает о нажатии до Controller. Это позволяет надёжно перехватить
+    // именно повторное «Вправо» на последней карточке как в InteractionMain,
+    // так и в InteractionCategory, не завися от различий версий Lampa.
+    if (Lampa.Keypad && Lampa.Keypad.listener) {
+      Lampa.Keypad.listener.follow('keydown', (event) => {
+        if (!active || !event || event.code !== 39) return;
+        const enabled = Lampa.Controller.enabled && Lampa.Controller.enabled();
+        if (!enabled || (enabled.name !== 'items_line' && enabled.name !== 'content')) return;
+        const focused = document.querySelector('.selector.focus');
+        if (!focused) return;
+        const row = focused.closest('.items-line__body, .category-full');
+        if (!row) return;
+        const cards = Array.from(row.querySelectorAll('.selector')).filter((node) =>
+          !node.classList.contains('hide') && node.offsetParent !== null
+        );
+        const index = cards.indexOf(focused);
+        const gridEdge = row.classList.contains('category-full') &&
+          (index === cards.length - 1 || (index + 1) % MAIN_COLUMNS === 0);
+        if (index < 0 || (!gridEdge && cards[cards.length - 1] !== focused)) return;
+        if (event.event && typeof event.event.preventDefault === 'function') event.event.preventDefault();
+        open();
+      });
+    }
   }
 
   app.UI = {

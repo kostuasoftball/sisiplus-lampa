@@ -19,8 +19,7 @@
       this.models = new Map();
     }
     getName() { return this.config.name; }
-    getCapabilities() { return { liveTv: this.config.liveTv === true }; }
-    getLiveTVItems(options = {}) { return this.getList('all', options.page || 1, {}); }
+    getCapabilities() { return {}; }
     getCategories() {
       return Promise.resolve([
         { id: 'all', title: 'Популярные', group: 'type' }, { id: 'new', title: 'Новые', group: 'type' },

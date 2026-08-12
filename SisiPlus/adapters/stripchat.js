@@ -19,8 +19,7 @@
     }
 
     getName() { return 'Stripchat'; }
-    getCapabilities() { return { account: true, favorites: true, liveTv: true }; }
-    getLiveTVItems(options = {}) { return this.getList('popular', options.page || 1, {}); }
+    getCapabilities() { return { account: true, favorites: true }; }
 
     getFilters() {
       return Promise.resolve([app.AdapterUtils.countryFilter()]);
